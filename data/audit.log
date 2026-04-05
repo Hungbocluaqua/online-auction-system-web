@@ -1,0 +1,4 @@
+{"timestamp":1775240120115,"action":"request_denied","actor":"anonymous","outcome":"denied","target":"/api/session","detail":"Unauthorized"}
+{"timestamp":1775240158063,"action":"register","actor":"bidder1","outcome":"success","target":"account","detail":"0:0:0:0:0:0:0:1"}
+{"timestamp":1775240158064,"action":"login","actor":"bidder1","outcome":"success","target":"session","detail":"0:0:0:0:0:0:0:1"}
+{"timestamp":1775241972004,"action":"request_denied","actor":"anonymous","outcome":"denied","target":"/api/session","detail":"Unauthorized"}
