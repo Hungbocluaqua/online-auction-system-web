@@ -1,237 +1,245 @@
 # Online Auction System Web
 
-Browser-based online auction platform targeting the Vietnam market.
+Browser-based auction platform for listing, bidding, buy-it-now checkout, refunds, disputes, notifications, and basic admin operations.
 
-## Stack
+## What This Project Is
 
-- **Backend:** Java 17, HikariCP connection pooling
-- **Database:** Embedded H2 (dev/test) or PostgreSQL (production) with Flyway migrations
-- **HTTP:** `com.sun.net.httpserver` + raw WebSocket (Java-WebSocket)
-- **Frontend:** Vanilla HTML, CSS, and JavaScript SPA
-- **Serialization:** Gson 2.11.0
-- **Security:** BCrypt password hashing, CSRF protection, CAPTCHA, 2FA/TOTP, session expiry, account lockout
-- **Payments:** ZaloPay (Vietnam) — create order, IPN callback, query status
-- **Email:** SendGrid (stub for dev, real for production)
-- **Monitoring:** Prometheus + Grafana
-- **Logging:** Structured JSON logging + audit trail
-- **Build:** Maven with maven-shade-plugin (fat JAR)
+- Backend: Java 17, `com.sun.net.httpserver`, Gson, HikariCP
+- Database: H2 by default for local development, PostgreSQL supported through environment/config overrides
+- Frontend: vanilla HTML/CSS/JavaScript SPA
+- Realtime: Java-WebSocket server for auction updates
+- Security: BCrypt, CSRF protection, CAPTCHA, session expiry, lockout, optional TOTP 2FA
+- Payments: ZaloPay integration with stub mode when credentials are not configured
 
-## Quick Start
+## Current Status
 
-### Option 1: Run from source
-```bash
-mvn clean package -DskipTests
-java -jar target/online-auction-system-web-1.0-SNAPSHOT.jar
-```
+- Local development ready
+- Docker build and Docker Compose setup included
+- Not production-ready by default
 
-### Option 2: Docker Compose (production stack with PostgreSQL, Redis, nginx, Mailpit, Prometheus, Grafana)
-```bash
-docker-compose up -d
-```
+Production caveats:
 
-Open **http://localhost:8080** in your browser.
-
-## Default Accounts
-
-The bootstrap `admin` password is generated on first start unless `ADMIN_PASSWORD` is set. Check server logs for the generated credential.
-
-Development seed users:
-- `seller1` / `TestP@ss1!`
-- `bidder1` / `TestP@ss2!`
+- The default database is embedded H2.
+- If `ADMIN_PASSWORD` is not set, the app creates a bootstrap admin and logs the generated password.
+- Email and payment integrations run in stub mode until credentials are configured.
 
 ## Features
 
-### Security
-- CAPTCHA on login and registration (math challenges)
-- 2FA/TOTP setup, enable, and disable
-- Strict password policy (8-128 chars, uppercase, lowercase, digit, special character)
-- Session-based authentication with 24h absolute / 30min idle expiry
-- CSRF protection on all state-changing requests
-- Account lockout after 5 consecutive failed login attempts (15min lock)
-- Password reset flow with expiring tokens (email delivery via SendGrid)
-- Email verification flow
-- Security headers: CSP, HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy
-- Legacy SHA-256 hash auto-migration to BCrypt
-- Rate limiting on auth, bidding, and auction creation
+- User registration and login with CAPTCHA
+- Optional 2FA setup and verification
+- Password reset and email verification
+- Auction creation, editing, deletion, scheduling, and buy-it-now pricing
+- Manual bidding and auto-bid configuration
+- Watchlist and in-app notifications
+- Payment initiation, fulfillment tracking, refund requests, and disputes
+- Admin user management, auction limits, refunds, disputes, backup, and metrics
+- Health endpoints and Prometheus-style metrics output
 
-### Auctions
-- Create, edit, and delete auctions (sellers)
-- **Buy-It-Now** — instant purchase at a fixed price with ZaloPay checkout
-- **Reserve Prices** — hidden minimum; auction only completes if reserve is met
-- **Auction Scheduling** — set a future start time; auction stays OPEN until then
-- Browse active and ended auctions with live countdown timers
-- **Pagination** with configurable page size and page number
-- **Category browsing** and **search filtering**
-- Manual bidding with validation
-- Auto-bid configuration with incremental proxy bidding
-- Real-time updates via WebSocket
-- Image upload (JPEG, PNG, GIF, WebP — validated by magic bytes)
-- Soft-close / sniping protection (30s extension on late bids)
+## Requirements
 
-### Payments (ZaloPay)
-- **Create Order** — generates ZaloPay checkout URL + QR code for VND payments
-- **IPN Callback** — auto-confirms payment via ZaloPay POST callback, updates DB, generates invoice, notifies user
-- **Query Status** — fallback polling to check payment status
-- **Buy-It-Now** — direct checkout flow for fixed-price purchases
-- **Refund Requests** — winners can request refunds on paid/delivered auctions
-- **Admin Refund Processing** — approve or reject refund requests
-- Fulfillment tracking: `none` → `awaiting_payment` → `paid` → `delivered` / `refunded`
+- Java 17+
+- Maven 3.8+
 
-### User Features
-- **Watchlist** — save and track auctions of interest (add/remove from cards or detail view)
-- **Notifications** — in-app bell badge with unread count, mark individual or all as read
-- **Account History** — tabbed view: All Activity, My Bids, Won Auctions, Sold Items
-- **Invoices** — auto-generated receipts for completed payments
-- **Categories** — clickable category grid showing active auction counts
-- Password change, username update, email verification
-- Account deletion with cascade cleanup
+## Run Locally
 
-### Admin
-- List all users and manage auction limits
-- Delete users (except admins)
-- Cancel auctions
-- Confirm payments and resolve disputes
-- **Refund Management** — view all refund requests, approve or reject with payment reversal
-- **System metrics** — total users, active auctions, bids, payments, disputes
-- **Database backup/export** — JSON backup of all data
-- **Dispute management** — view, resolve, and take action on disputes
+Build:
 
-### Marketplace
-- Payment initiation by winning bidders via ZaloPay
-- Auto-confirm via ZaloPay IPN callback (no manual admin approval needed)
-- Fulfillment tracking (mark received)
-- Dispute reporting and resolution
-- In-app notifications with WebSocket broadcast
-- VND as default currency
-
-### Operations
-- `/api/health` — health check with DB status
-- `/api/health/live` — liveness probe
-- `/api/health/ready` — readiness probe
-- `/api/metrics` — Prometheus-style metrics
-- `/api/admin/backup` — database backup endpoint
-- `/api/admin/metrics` — system metrics endpoint
-- `/api/admin/refunds` — list all refund requests (admin)
-- `/api/zalopay/callback` — ZaloPay IPN webhook (auto-confirm)
-- `/api/zalopay/query` — manual payment status query
-- Structured JSON logging
-- Audit log (`data/audit.log`)
-
-## Project Structure
-
+```powershell
+mvn clean package -DskipTests
 ```
-src/main/java/com/auction/web/
-├── WebAuctionApplication.java    # Entry point + ZaloPay init
-├── Logger.java                   # Structured JSON logging
-├── http/
-│   ├── ApiHandler.java           # HTTP routing + CSRF + rate limiting + CAPTCHA + security headers
-│   ├── HealthHandler.java        # Health & metrics endpoints
-│   ├── MetricsCollector.java     # Prometheus-style metrics
-│   ├── RateLimiter.java          # Per-key rate limiting
-│   ├── AuditLogger.java          # Async audit log
-│   ├── HtmlSanitizer.java        # XSS prevention
-│   ├── HttpUtil.java             # HTTP utilities
-│   └── StaticFileHandler.java    # Static file serving
-├── model/
-│   ├── User.java                 # User entity + password hashing + 2FA fields
-│   ├── Auction.java              # Auction entity + bid logic + buy-it-now + reserve
-│   ├── Item.java                 # Item hierarchy
-│   └── BidTransaction.java       # Bid record
-├── service/
-│   ├── AuctionService.java       # Core business logic (auth, bidding, payments, refunds, disputes, notifications, watchlist, 2FA, invoices, backup, scheduling)
-│   ├── DatabaseManager.java      # HikariCP + schema init + Flyway + PostgreSQL support
-│   ├── EmailService.java         # SendGrid email integration
-│   ├── ZaloPayService.java       # ZaloPay API: create order, verify IPN MAC, query status
-│   ├── StripeService.java        # Legacy Stripe (deprecated, kept for reference)
-│   └── WebSocketServerImpl.java  # WebSocket server
-├── dto/                          # Request/response DTOs
-└── persistence/                  # JSON/DB snapshot stores
 
-src/main/resources/
-├── db/migration/                 # Flyway SQL migrations
-│   └── V1__Initial_schema.sql
-├── static/
-│   ├── index.html                # SPA entry point (all views)
-│   ├── app.js                    # Frontend application (routing, rendering, API, WebSocket)
-│   └── styles.css                # Styles
-└── application.properties        # Configuration
+Run:
 
-monitoring/
-└── prometheus.yml                # Prometheus scrape config
-
-nginx/
-└── nginx.conf                    # Reverse proxy + TLS config
+```powershell
+java -jar target/online-auction-system-web-1.0-SNAPSHOT.jar
 ```
+
+Open:
+
+- App: `http://localhost:8080`
+
+Default local ports come from [application.properties](src/main/resources/application.properties):
+
+- HTTP: `8080`
+- WebSocket: `8889`
+
+## Testing
+
+Run the test suite:
+
+```powershell
+mvn test
+```
+
+Package without tests:
+
+```powershell
+mvn -DskipTests package
+```
+
+## Default Admin Access
+
+The app bootstraps an `admin` account on first start.
+
+- If `ADMIN_PASSWORD` is set, that value is used.
+- If `ADMIN_PASSWORD` is not set, a random password is generated.
+- The generated password is logged during bootstrap and written to `data/bootstrap-admin-credentials.log`.
+
+This behavior is convenient for local setup and should be changed before any real deployment.
 
 ## Configuration
 
-### Environment Variables (Production)
+The app reads from `application.properties` and allows environment variables to override key values through [AppConfig.java](src/main/java/com/auction/web/config/AppConfig.java).
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DATABASE_URL` / `DB_URL` | PostgreSQL JDBC URL | `jdbc:h2:file:./data/auction-db` (H2 fallback) |
-| `DATABASE_USER` / `DB_USER` | Database username | `sa` |
-| `DATABASE_PASSWORD` / `DB_PASSWORD` | Database password | |
-| `HTTP_PORT` | HTTP server port | `8080` |
-| `WS_PORT` | WebSocket server port | `8889` |
-| `SENDGRID_API_KEY` | SendGrid API key | (stub mode — logs to console) |
-| `EMAIL_FROM` | From email address | `noreply@auctionsystem.com` |
-| `EMAIL_FROM_NAME` | From name | `Auction System` |
-| `ZALOPAY_APP_ID` | ZaloPay application ID | (stub mode) |
-| `ZALOPAY_KEY1` | ZaloPay HMAC key for signing requests | |
-| `ZALOPAY_KEY2` | ZaloPay HMAC key for verifying IPN callbacks | |
-| `ZALOPAY_PRODUCTION` | Use production ZaloPay API (`true`/`false`) | `false` (sandbox) |
-| `BASE_URL` | Application base URL for callbacks | `http://localhost:8080` |
-| `CORS_ORIGIN` | Allowed browser origin | derived from `BASE_URL` |
-| `ADMIN_PASSWORD` | Explicit bootstrap admin password | generated on first start |
-| `APP_ENV` | Environment | `development` |
+Important settings:
 
-### application.properties
+| Variable | Default |
+| --- | --- |
+| `HTTP_PORT` | `8080` |
+| `WS_PORT` | `8889` |
+| `DATABASE_URL` / `DB_URL` | `jdbc:h2:file:./data/auction-db;AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1;LOCK_MODE=3;CACHE_SIZE=131072` |
+| `DATABASE_USER` / `DB_USER` | `sa` |
+| `DATABASE_PASSWORD` / `DB_PASSWORD` | empty |
+| `SESSION_TTL_SECONDS` | `86400` |
+| `SESSION_IDLE_TIMEOUT_SECONDS` | `1800` |
+| `BASE_URL` | `http://localhost:8080` |
+| `CORS_ORIGIN` | derived from `BASE_URL` |
+| `ADMIN_PASSWORD` | generated if unset |
+| `SENDGRID_API_KEY` | unset, email stub mode |
+| `EMAIL_FROM` | env only |
+| `EMAIL_FROM_NAME` | env only |
+| `ZALOPAY_APP_ID` | unset, payment stub mode |
+| `ZALOPAY_KEY1` | unset |
+| `ZALOPAY_KEY2` | unset |
+| `ZALOPAY_PRODUCTION` | `false` |
+
+Default local properties:
 
 ```properties
 http.port=8080
 ws.port=8889
-db.url=jdbc:h2:file:./data/auction-db;AUTO_SERVER=TRUE
+db.url=jdbc:h2:file:./data/auction-db;AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1;LOCK_MODE=3;CACHE_SIZE=131072
 db.user=sa
 db.password=
 session.ttl.seconds=86400
 session.idle.timeout.seconds=1800
+base.url=http://localhost:8080
 cors.origin=http://localhost:8080
 bcrypt.cost=12
 ```
 
-## Testing
-
-```bash
-mvn test
-```
-
-44 tests (10 integration + 14 unit + 20 security) — all passing.
-
 ## Docker
 
-### Simple (H2 only)
-```bash
-docker build -t auction-system .
-docker run -p 8080:8080 -p 8889:8889 auction-system
+Build the image:
+
+```powershell
+docker build -t online-auction-system-web .
 ```
 
-### Full Stack (PostgreSQL, Redis, nginx, Mailpit, Prometheus, Grafana)
-```bash
+Run the container:
+
+```powershell
+docker run -p 8080:8080 -p 8889:8889 online-auction-system-web
+```
+
+Compose stack:
+
+```powershell
 docker-compose up -d
 ```
 
-Services:
-- **App:** http://localhost:8080
-- **Mailpit (email preview):** http://localhost:8025
-- **Prometheus:** http://localhost:9090
-- **Grafana:** http://localhost:3000
+The compose file includes:
+
+- app container
+- nginx
+- PostgreSQL
+- Redis
+- Mailpit
+- Prometheus
+- Grafana
+
+Note: the app currently uses PostgreSQL, Mailpit, Prometheus, and Grafana more directly than Redis. Redis is present in the compose stack but is not a core runtime dependency in the current Java service.
+
+## HTTP Endpoints
+
+Operational endpoints:
+
+- `/api/health`
+- `/api/health/live`
+- `/api/health/ready`
+- `/api/metrics`
+
+Common app endpoints:
+
+- `/api/login`
+- `/api/register`
+- `/api/logout`
+- `/api/auctions`
+- `/api/categories`
+- `/api/notifications`
+- `/api/watchlist`
+- `/api/invoices`
+- `/api/account/history`
+
+Admin-oriented endpoints:
+
+- `/api/admin/refunds`
+- `/api/admin/disputes`
+- `/api/admin/metrics`
+- `/api/admin/backup`
+
+Payment-related endpoints:
+
+- `/api/zalopay/callback`
+- `/api/zalopay/query`
+
+## Project Layout
+
+```text
+src/main/java/com/auction/web/
+  WebAuctionApplication.java
+  Logger.java
+  config/
+  dto/
+  http/
+  model/
+  persistence/
+  service/
+
+src/main/resources/
+  application.properties
+  static/
+
+monitoring/
+  prometheus.yml
+
+nginx/
+  nginx.conf
+```
+
+## Local Data And Generated Files
+
+At runtime the app creates local data such as:
+
+- `data/auction-db.*`
+- `data/audit.log`
+- `data/bootstrap-admin-credentials.log`
+- uploaded files under `uploads/`
+- Maven build output under `target/`
+
+These should not be committed. The repository now ignores them through `.gitignore`.
 
 ## Troubleshooting
 
-- **"Column not found" errors:** Delete stale `data/auction-db.*` files and restart.
-- **Changes not visible:** Hard-refresh browser (`Ctrl+Shift+R` / `Ctrl+F5`) — `app.js` is aggressively cached.
-- **Port already in use:** Kill existing Java processes or change ports in `application.properties`.
-- **CAPTCHA required:** All login and registration requests must include `captchaChallengeId` and `captchaAnswer`. Get a challenge via `GET /api/captcha`.
-- **ZaloPay not working:** Ensure `ZALOPAY_APP_ID`, `ZALOPAY_KEY1`, and `ZALOPAY_KEY2` are set. Sandbox mode is default — set `ZALOPAY_PRODUCTION=true` for live.
-- **Emails not sending:** Without a real SendGrid API key, emails are stubbed to console logs. Set `SENDGRID_API_KEY` to a real key or use Mailpit in Docker for local preview.
+- Port already in use: change `http.port` / `ws.port` or stop the other process
+- Login/register fails with CAPTCHA error: fetch a new challenge from `GET /api/captcha`
+- Bootstrap admin password unknown: check startup logs or `data/bootstrap-admin-credentials.log`
+- ZaloPay not redirecting: configure `ZALOPAY_APP_ID`, `ZALOPAY_KEY1`, and `ZALOPAY_KEY2`
+- Email not sending: configure `SENDGRID_API_KEY`, otherwise email runs in stub mode
+- Old schema/data problems: remove local H2 files under `data/` only if you do not need the local data
+
+## Notes
+
+- The frontend is still a single-file SPA in `src/main/resources/static/app.js`.
+- The main service layer is still concentrated in `AuctionService.java`.
+- This repository is in a stronger local-dev/staging shape than true production shape.
