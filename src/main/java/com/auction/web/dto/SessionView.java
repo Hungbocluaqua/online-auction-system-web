@@ -9,6 +9,7 @@ public class SessionView {
     private User.Role role;
     private int auctionLimit;
     private long createdAt;
+    private String csrfToken;
 
     public SessionView(String token, String userId, String username, User.Role role, int auctionLimit, long createdAt) {
         this.token = token;
@@ -17,6 +18,14 @@ public class SessionView {
         this.role = role;
         this.auctionLimit = auctionLimit;
         this.createdAt = createdAt;
+    }
+
+    public void setCsrfToken(String csrfToken) {
+        this.csrfToken = csrfToken;
+    }
+
+    public String getCsrfToken() {
+        return csrfToken;
     }
 
     public String getToken() {

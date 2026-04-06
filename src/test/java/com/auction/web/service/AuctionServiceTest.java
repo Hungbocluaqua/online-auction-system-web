@@ -1,91 +1,157 @@
 package com.auction.web.service;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
-import com.auction.web.dto.AuctionCreateRequest;
-import com.auction.web.dto.SessionView;
-import com.auction.web.persistence.DatabaseSnapshotStore;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import com.auction.web.model.Auction;
+import com.auction.web.model.BidTransaction;
+import com.auction.web.model.Item;
+import com.auction.web.model.ItemFactory;
+import com.auction.web.model.User;
 import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
 
 class AuctionServiceTest {
 
     @Test
-    void databaseStorePersistsRegisteredUserAndAuction() throws Exception {
-        Path tempDir = Files.createTempDirectory("auction-service-db");
-        AuctionService service = new AuctionService(DatabaseSnapshotStore.forFile(tempDir.resolve("auction-db")), false);
-
-        SessionView registered = service.register("phase1-user", "password123", "USER");
-        AuctionCreateRequest request = new AuctionCreateRequest();
-        request.itemType = "BOOK";
-        request.name = "Distributed Systems";
-        request.description = "Reference book";
-        request.startingPrice = 100;
-        request.currency = "USD";
-        request.extraInfo = "Tanenbaum";
-        request.imageUrl = "";
-        request.durationMinutes = 60;
-        String auctionId = service.createAuction(registered.getToken(), request).getId();
-
-        AuctionService reloaded = new AuctionService(DatabaseSnapshotStore.forFile(tempDir.resolve("auction-db")), false);
-        SessionView loggedIn = reloaded.login("phase1-user", "password123");
-
-        assertNotNull(loggedIn);
-        assertTrue(reloaded.getAuctions().stream().anyMatch(auction -> auction.getId().equals(auctionId)));
-        assertTrue(reloaded.getAuctions().stream().anyMatch(auction -> "USD".equals(auction.getCurrency())));
+    void userPasswordHashingWithBcrypt() {
+        User user = new User("1", "testuser", "password123", User.Role.USER);
+        assertTrue(user.getPasswordHashForStorage().startsWith("$2a$"));
     }
 
     @Test
-    void placedBidPersistsAcrossReload() throws Exception {
-        Path tempDir = Files.createTempDirectory("auction-service-db-bid");
-        AuctionService service = new AuctionService(DatabaseSnapshotStore.forFile(tempDir.resolve("auction-db")), false);
-
-        SessionView seller = service.register("seller-phase1", "password123", "USER");
-        SessionView bidder = service.register("bidder-phase1", "password123", "USER");
-        AuctionCreateRequest request = new AuctionCreateRequest();
-        request.itemType = "ELECTRONICS";
-        request.name = "Camera";
-        request.description = "Mirrorless";
-        request.startingPrice = 200;
-        request.currency = "USD";
-        request.extraInfo = "Sony";
-        request.imageUrl = "";
-        request.durationMinutes = 60;
-        String auctionId = service.createAuction(seller.getToken(), request).getId();
-
-        service.placeBid(bidder.getToken(), auctionId, 250);
-
-        AuctionService reloaded = new AuctionService(DatabaseSnapshotStore.forFile(tempDir.resolve("auction-db")), false);
-        var auction = reloaded.getAuction(auctionId);
-
-        assertEquals(250, auction.getCurrentPrice());
-        assertEquals("bidder-phase1", auction.getHighestBidderUsername());
-        assertFalse(auction.getBidHistory().isEmpty());
+    void userPasswordCheck() {
+        User user = new User("1", "testuser", "password123", User.Role.USER);
+        assertTrue(user.checkPassword("password123"));
+        assertFalse(user.checkPassword("wrongpassword"));
     }
 
     @Test
-    void accountDeletionIsBlockedForUsersWithAuctionHistory() throws Exception {
-        Path tempDir = Files.createTempDirectory("auction-service-db-delete");
-        AuctionService service = new AuctionService(DatabaseSnapshotStore.forFile(tempDir.resolve("auction-db")), false);
+    void userAdminLimitIsUnlimited() {
+        User admin = new User("1", "admin", "password", User.Role.ADMIN);
+        assertEquals(Integer.MAX_VALUE, admin.getAuctionLimit());
+    }
 
-        SessionView seller = service.register("seller-guard", "password123", "USER");
-        AuctionCreateRequest request = new AuctionCreateRequest();
-        request.itemType = "ART";
-        request.name = "Canvas";
-        request.description = "Painting";
-        request.startingPrice = 300;
-        request.currency = "USD";
-        request.extraInfo = "Unknown";
-        request.imageUrl = "";
-        request.durationMinutes = 60;
-        service.createAuction(seller.getToken(), request);
+    @Test
+    void userDefaultLimitForRegularUser() {
+        User user = new User("1", "testuser", "password123", User.Role.USER);
+        assertEquals(3, user.getAuctionLimit());
+    }
 
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> service.deleteAccount(seller.getToken(), "password123"));
-        assertTrue(ex.getMessage().contains("Delete your auctions"));
+    @Test
+    void itemTypeStringsAreUppercase() {
+        Item vehicle = ItemFactory.createItem("VEHICLE", "1", "Car", "desc", 100, "2020");
+        Item electronics = ItemFactory.createItem("ELECTRONICS", "2", "Phone", "desc", 50, "BrandX");
+        Item art = ItemFactory.createItem("ART", "3", "Painting", "desc", 200, "Artist");
+
+        assertEquals("VEHICLE", vehicle.getType());
+        assertEquals("ELECTRONICS", electronics.getType());
+        assertEquals("ART", art.getType());
+    }
+
+    @Test
+    void auctionPlaceBidValid() {
+        Item item = ItemFactory.createItem("ELECTRONICS", "1", "Phone", "desc", 100, "BrandX");
+        Auction auction = new Auction("a1", item, "owner1", "seller", System.currentTimeMillis(), System.currentTimeMillis() + 3600000);
+        auction.setState(Auction.State.RUNNING);
+
+        User bidder = new User("b1", "bidder", "password", User.Role.USER);
+        assertTrue(auction.placeBid(bidder, 150));
+        assertEquals(150, auction.getCurrentPrice());
+        assertEquals("b1", auction.getHighestBidderId());
+    }
+
+    @Test
+    void auctionCannotBidOnOwnAuction() {
+        Item item = ItemFactory.createItem("ELECTRONICS", "1", "Phone", "desc", 100, "BrandX");
+        Auction auction = new Auction("a1", item, "owner1", "seller", System.currentTimeMillis(), System.currentTimeMillis() + 3600000);
+        auction.setState(Auction.State.RUNNING);
+
+        User owner = new User("owner1", "seller", "password", User.Role.USER);
+        assertFalse(auction.placeBid(owner, 150));
+    }
+
+    @Test
+    void auctionCannotBidAgainstSelf() {
+        Item item = ItemFactory.createItem("ELECTRONICS", "1", "Phone", "desc", 100, "BrandX");
+        Auction auction = new Auction("a1", item, "owner1", "seller", System.currentTimeMillis(), System.currentTimeMillis() + 3600000);
+        auction.setState(Auction.State.RUNNING);
+
+        User bidder1 = new User("b1", "bidder1", "password", User.Role.USER);
+        assertTrue(auction.placeBid(bidder1, 150));
+
+        assertFalse(auction.placeBid(bidder1, 200));
+    }
+
+    @Test
+    void auctionCannotBidWhenFinished() {
+        Item item = ItemFactory.createItem("ELECTRONICS", "1", "Phone", "desc", 100, "BrandX");
+        Auction auction = new Auction("a1", item, "owner1", "seller", System.currentTimeMillis(), System.currentTimeMillis() + 3600000);
+        auction.setState(Auction.State.FINISHED);
+
+        User bidder = new User("b1", "bidder", "password", User.Role.USER);
+        assertFalse(auction.placeBid(bidder, 150));
+    }
+
+    @Test
+    void auctionSnipingProtection() {
+        Item item = ItemFactory.createItem("ELECTRONICS", "1", "Phone", "desc", 100, "BrandX");
+        long now = System.currentTimeMillis();
+        Auction auction = new Auction("a1", item, "owner1", "seller", now, now + 10000);
+        auction.setState(Auction.State.RUNNING);
+
+        User bidder = new User("b1", "bidder", "password", User.Role.USER);
+        auction.placeBid(bidder, 150);
+
+        assertTrue(auction.getEndTime() > now + 10000);
+    }
+
+    @Test
+    void auctionHasBids() {
+        Item item = ItemFactory.createItem("ELECTRONICS", "1", "Phone", "desc", 100, "BrandX");
+        Auction auction = new Auction("a1", item, "owner1", "seller", System.currentTimeMillis(), System.currentTimeMillis() + 3600000);
+        auction.setState(Auction.State.RUNNING);
+
+        assertFalse(auction.hasBids());
+
+        User bidder = new User("b1", "bidder", "password", User.Role.USER);
+        auction.placeBid(bidder, 150);
+
+        assertTrue(auction.hasBids());
+    }
+
+    @Test
+    void auctionUpdateItemDoesNotResetPrice() {
+        Item item = ItemFactory.createItem("ELECTRONICS", "1", "Phone", "desc", 100, "BrandX");
+        Auction auction = new Auction("a1", item, "owner1", "seller", System.currentTimeMillis(), System.currentTimeMillis() + 3600000);
+        auction.setState(Auction.State.RUNNING);
+
+        User bidder = new User("b1", "bidder", "password", User.Role.USER);
+        auction.placeBid(bidder, 150);
+        assertEquals(150, auction.getCurrentPrice());
+
+        Item newItem = ItemFactory.createItem("ELECTRONICS", "2", "NewPhone", "new desc", 50, "BrandY");
+        auction.updateItem(newItem);
+
+        assertEquals(150, auction.getCurrentPrice());
+    }
+
+    @Test
+    void bidTransactionFields() {
+        BidTransaction bid = new BidTransaction("b1", "bidder", 150.0, System.currentTimeMillis());
+        assertEquals("b1", bid.getBidderId());
+        assertEquals("bidder", bid.getBidderUsername());
+        assertEquals(150.0, bid.getAmount());
+    }
+
+    @Test
+    void userFromStoredHash() {
+        String hash = "$2a$12$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ123";
+        User user = User.fromStoredHash("1", "testuser", hash, User.Role.USER, 5, 1000L);
+        assertEquals("1", user.getId());
+        assertEquals("testuser", user.getUsername());
+        assertEquals(User.Role.USER, user.getRole());
+        assertEquals(5, user.getAuctionLimit());
+        assertEquals(1000L, user.getCreatedAt());
     }
 }

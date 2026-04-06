@@ -1,13 +1,26 @@
 const state = {
     token: localStorage.getItem("auction_token") || "",
     session: JSON.parse(localStorage.getItem("auction_session") || "null"),
+    csrfToken: localStorage.getItem("auction_csrf") || "",
     auctions: [],
     users: [],
+    notifications: [],
+    watchlist: [],
+    invoices: [],
     selectedAuctionId: null,
-    lastEventTime: Date.now(),
     currentView: 'landing',
-    activeTab: 'all'
+    activeTab: 'all',
+    authMode: 'login',
+    myAuctionsTab: 'all',
+    historyTab: 'all',
+    editingAuctionId: null,
+    twoFaSecret: null
 };
+
+function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+}
 
 const els = {
     app: document.getElementById("app"),
@@ -18,23 +31,19 @@ const els = {
     userAvatar: document.getElementById("userAvatar"),
     adminLink: document.getElementById("adminLink"),
     toast: document.getElementById("toast"),
-    
-    // Auth
+    logoutButton: document.getElementById("logoutButton"),
+    notifBell: document.getElementById("notifBell"),
+    notifBadge: document.getElementById("notifBadge"),
     authView: document.getElementById("authView"),
     authForm: document.getElementById("authForm"),
     authTitle: document.getElementById("authTitle"),
     authSubmit: document.getElementById("authSubmit"),
-    roleGroup: document.getElementById("roleGroup"),
     authToggleLink: document.getElementById("authToggleLink"),
     authToggleText: document.getElementById("authToggleText"),
-
-    // Grids
     latestGrid: document.getElementById("latestGrid"),
     fullGrid: document.getElementById("fullGrid"),
     adminGrid: document.getElementById("adminGrid"),
     myBidsGrid: document.getElementById("myBidsGrid"),
-    
-    // Stats
     statTotal: document.getElementById("statTotal"),
     statActive: document.getElementById("statActive"),
     statMine: document.getElementById("statMine"),
@@ -42,8 +51,7 @@ const els = {
     statAdminTotal: document.getElementById("statAdminTotal"),
     statAdminUsers: document.getElementById("statAdminUsers"),
     statAdminRecent: document.getElementById("statAdminRecent"),
-    
-    // Detail
+    userTableBody: document.getElementById("userTableBody"),
     detailView: document.getElementById("detailView"),
     detailTitle: document.getElementById("detailTitle"),
     detailDesc: document.getElementById("detailDesc"),
@@ -52,7 +60,6 @@ const els = {
     detailBidCount: document.getElementById("detailBidCount"),
     detailCategory: document.getElementById("detailCategory"),
     detailImage: document.getElementById("detailImage"),
-    detailStateOverlay: document.getElementById("detailStateOverlay"),
     bidHistoryList: document.getElementById("bidHistoryList"),
     watcherList: document.getElementById("watcherList"),
     sellerName: document.getElementById("sellerName"),
@@ -61,20 +68,30 @@ const els = {
     timerSection: document.getElementById("timerSection"),
     bidActions: document.getElementById("bidActions"),
     endedMsg: document.getElementById("endedMsg"),
-    
-    // Global inputs
     searchInput: document.getElementById("searchInput"),
     categoryFilter: document.getElementById("categoryFilter")
 };
 
-// --- API & State Management ---
-
 async function api(path, options = {}) {
     const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
     if (state.token) headers.Authorization = `Bearer ${state.token}`;
-
+    if (state.csrfToken && (options.method === "PUT" || options.method === "DELETE" || options.method === "POST" && !path.startsWith("/api/login") && !path.startsWith("/api/register") && !path.startsWith("/api/password-reset") && !path.startsWith("/api/account/verify") && !path.startsWith("/api/zalopay/callback"))) {
+        headers["X-CSRF-Token"] = state.csrfToken;
+    }
     const response = await fetch(path, { ...options, headers });
-    const payload = await response.json();
+    let payload;
+    try {
+        payload = await response.json();
+    } catch (e) {
+        const text = await response.text();
+        throw new Error(`Server returned ${response.status}: ${text || 'Invalid response'}`);
+    }
+    if (response.status === 401) {
+        saveSession(null);
+        renderNav();
+        switchView('landing');
+        throw new Error("Session expired. Please sign in again.");
+    }
     if (!payload.success) throw new Error(payload.message || "Request failed");
     return payload.data;
 }
@@ -82,12 +99,15 @@ async function api(path, options = {}) {
 function saveSession(session) {
     state.session = session;
     state.token = session?.token || "";
+    state.csrfToken = session?.csrfToken || "";
     if (state.token) {
         localStorage.setItem("auction_token", state.token);
         localStorage.setItem("auction_session", JSON.stringify(session));
+        if (state.csrfToken) localStorage.setItem("auction_csrf", state.csrfToken);
     } else {
         localStorage.removeItem("auction_token");
         localStorage.removeItem("auction_session");
+        localStorage.removeItem("auction_csrf");
     }
 }
 
@@ -97,22 +117,26 @@ function notify(message, type = "info") {
     setTimeout(() => els.toast.className = "toast hidden", 3000);
 }
 
-// --- Routing & Navigation ---
-
 function switchView(viewId) {
     state.currentView = viewId;
     document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
     const target = document.getElementById(viewId + 'View');
     if (target) target.classList.remove('hidden');
-
     document.querySelectorAll('.nav-link').forEach(link => {
         link.classList.toggle('active', link.dataset.view === viewId);
     });
-
     if (viewId === 'dashboard') renderDashboard();
     if (viewId === 'auctions') renderAuctions();
+    if (viewId === 'categories') renderCategories();
     if (viewId === 'my-bids') renderMyBids();
+    if (viewId === 'my-auctions') renderMyAuctions();
+    if (viewId === 'watchlist') renderWatchlist();
+    if (viewId === 'invoices') renderInvoices();
+    if (viewId === 'history') renderHistory();
     if (viewId === 'admin') renderAdminDashboard();
+    if (viewId === 'admin-refunds') renderAdminRefunds();
+    if (viewId === 'notifications') renderNotifications();
+    if (viewId === 'account') renderAccount();
 }
 
 function renderNav() {
@@ -120,48 +144,47 @@ function renderNav() {
     els.guestNav.classList.toggle("hidden", loggedIn);
     els.userNav.classList.toggle("hidden", !loggedIn);
     els.mainNav.classList.toggle("hidden", !loggedIn);
-
     if (loggedIn) {
-        els.userName.textContent = state.session.username.split(' ')[0];
-        els.userAvatar.textContent = state.session.username[0].toUpperCase();
+        const username = state.session.username || '';
+        els.userName.textContent = username.split(' ')[0];
+        els.userAvatar.textContent = username.length > 0 ? username[0].toUpperCase() : '?';
         els.adminLink.classList.toggle("hidden", state.session.role !== "ADMIN");
+        loadNotifications();
     }
 }
 
-// --- Rendering Logic ---
-
-function formatMoney(value) {
-    return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value).replace("INR", "Rs");
+function formatMoney(value, currency = "VND") {
+    return new Intl.NumberFormat("vi-VN", { style: "currency", currency: currency, maximumFractionDigits: 0 }).format(value);
 }
 
 function getIcon(type) {
-    const icons = { ELECTRONICS: '📱', ART: '🎨', VEHICLE: '🚗' };
-    return icons[type.toUpperCase()] || '📦';
+    const icons = { ELECTRONICS: '📱', ART: '🎨', VEHICLE: '🚗', BOOK: '📚', FASHION: '👗', COLLECTIBLE: '🏆', PROPERTY: '🏠' };
+    return icons[type?.toUpperCase()] || '📦';
 }
 
 function createAuctionCard(auction, options = {}) {
     const isEnded = auction.state === 'FINISHED' || auction.state === 'CANCELED';
     const timeLabel = isEnded ? 'Ended' : relativeEndShort(auction.endTime);
-    
-    const imageHtml = auction.imageFilename ? 
-        `<img src="/uploads/${auction.imageFilename}" style="width:100%; height:100%; object-fit:cover;">` : 
+    const imageHtml = auction.imageFilename ?
+        `<img src="/uploads/${escapeHtml(auction.imageFilename)}" style="width:100%; height:100%; object-fit:cover;">` :
         getIcon(auction.itemType);
-
+    const isWatching = state.watchlist.some(w => w.id === auction.id);
     return `
-        <article class="auction-card" onclick="openDetail('${auction.id}')">
+        <article class="auction-card" data-auction-id="${escapeHtml(auction.id)}">
             <div class="image-placeholder">
                 ${imageHtml}
-                <div class="tag-top-left">${auction.itemType}</div>
+                <div class="tag-top-left">${escapeHtml(auction.itemType)}</div>
                 ${isEnded ? '<div class="tag-top-right">Ended</div>' : `<div class="tag-bottom-right">${timeLabel} left</div>`}
+                ${!isEnded ? `<button class="watch-icon-btn ${isWatching ? 'watching' : ''}" data-watch-id="${escapeHtml(auction.id)}" title="${isWatching ? 'Unwatch' : 'Watch'}">${isWatching ? '★' : '☆'}</button>` : ''}
             </div>
             <div class="auction-card-content">
-                <p class="subtle eyebrow">by ${auction.ownerUsername}</p>
-                <h3>${auction.itemName}</h3>
-                <p class="subtle">${auction.description}</p>
+                <p class="subtle eyebrow">by ${escapeHtml(auction.ownerUsername)}</p>
+                <h3>${escapeHtml(auction.itemName)}</h3>
+                <p class="subtle">${escapeHtml(auction.description)}</p>
                 <div class="auction-card-footer">
                     <div class="bid-info">
                         <p class="subtle eyebrow">CURRENT BID</p>
-                        <span class="bid-amount">${formatMoney(auction.currentPrice)}</span>
+                        <span class="bid-amount">${formatMoney(auction.currentPrice, auction.currency)}</span>
                     </div>
                     <div class="bid-count">${auction.bidCount} bids</div>
                     <a href="#" class="link">View →</a>
@@ -185,7 +208,6 @@ function relativeEndShort(timestamp) {
 function renderDashboard() {
     const sorted = [...state.auctions].sort((a, b) => b.startTime - a.startTime);
     els.latestGrid.innerHTML = sorted.slice(0, 4).map(a => createAuctionCard(a)).join("");
-    
     els.statTotal.textContent = state.auctions.length;
     els.statActive.textContent = state.auctions.filter(a => a.state === 'RUNNING').length;
     els.statMine.textContent = state.auctions.filter(a => a.ownerId === state.session?.userId).length;
@@ -194,96 +216,477 @@ function renderDashboard() {
 function renderAuctions() {
     const search = els.searchInput?.value.toLowerCase() || "";
     const category = els.categoryFilter?.value || "All";
-    
     const filtered = state.auctions.filter(a => {
-        const matchesSearch = !search || 
-            a.itemName.toLowerCase().includes(search) || 
-            a.description.toLowerCase().includes(search);
-        
-        const matchesCategory = category === "All" || 
-            a.itemType.toUpperCase() === category.toUpperCase();
-            
+        const matchesSearch = !search || a.itemName.toLowerCase().includes(search) || a.description.toLowerCase().includes(search);
+        const matchesCategory = category === "All" || a.itemType.toUpperCase() === category.toUpperCase();
         return matchesSearch && matchesCategory;
     });
-
     if (els.fullGrid) {
         els.fullGrid.innerHTML = filtered.map(a => createAuctionCard(a)).join("");
     }
     const countEl = document.getElementById("auctionCount");
-    if (countEl) {
-        countEl.textContent = `${filtered.length} items found`;
-    }
+    if (countEl) countEl.textContent = `${filtered.length} items found`;
+}
+
+function renderCategories() {
+    const categories = ['ELECTRONICS', 'ART', 'VEHICLE', 'BOOK', 'FASHION', 'COLLECTIBLE', 'PROPERTY'];
+    const grid = document.getElementById("categoriesGrid");
+    if (!grid) return;
+    grid.innerHTML = categories.map(cat => {
+        const items = state.auctions.filter(a => a.itemType === cat && a.state === 'RUNNING');
+        return `
+            <div class="category-card" data-category="${cat}">
+                <div style="font-size:3rem; margin-bottom:0.5rem;">${getIcon(cat)}</div>
+                <h3>${cat.charAt(0) + cat.slice(1).toLowerCase()}</h3>
+                <p class="subtle">${items.length} active auctions</p>
+            </div>
+        `;
+    }).join("");
+    grid.querySelectorAll('.category-card').forEach(card => {
+        card.addEventListener('click', () => {
+            els.categoryFilter.value = card.dataset.category;
+            switchView('auctions');
+            renderAuctions();
+        });
+    });
 }
 
 function renderMyBids() {
-    const participated = state.auctions.filter(a => 
+    const participated = state.auctions.filter(a =>
         a.bidHistory.some(b => b.bidderId === state.session?.userId)
     );
-    
     const filtered = participated.filter(a => {
         if (state.activeTab === 'active') return a.state === 'RUNNING';
         if (state.activeTab === 'ended') return a.state === 'FINISHED';
         return true;
     });
+    els.myBidsGrid.innerHTML = filtered.length ? filtered.map(a => createAuctionCard(a)).join("") : '<p class="subtle" style="text-align:center; padding:3rem 0;">You haven\'t bid on anything yet.</p>';
+    const countEl = document.getElementById("myBidsCount");
+    if (countEl) countEl.textContent = `All bids (${filtered.length})`;
+}
 
-    els.myBidsGrid.innerHTML = filtered.map(a => createAuctionCard(a)).join("");
+function renderMyAuctions() {
+    const myAuctions = state.auctions.filter(a => a.ownerId === state.session?.userId);
+    const myTab = state.myAuctionsTab || 'all';
+    const filtered = myAuctions.filter(a => {
+        if (myTab === 'active') return a.state === 'RUNNING';
+        if (myTab === 'ended') return a.state === 'FINISHED' || a.state === 'CANCELED';
+        return true;
+    });
+    const countEl = document.getElementById("myAuctionsCount");
+    if (countEl) countEl.textContent = `Your auctions (${filtered.length})`;
+    const grid = document.getElementById("myAuctionsGrid");
+    if (grid) grid.innerHTML = filtered.length ? filtered.map(a => createAuctionCard(a)).join("") : '<p class="subtle" style="text-align:center; padding:3rem 0;">You have no auctions yet.</p>';
+}
+
+async function renderWatchlist() {
+    if (!state.token) return;
+    try {
+        state.watchlist = await api("/api/watchlist");
+    } catch (e) { state.watchlist = []; }
+    const grid = document.getElementById("watchlistGrid");
+    const empty = document.getElementById("watchlistEmpty");
+    if (state.watchlist.length === 0) {
+        grid.innerHTML = "";
+        empty.classList.remove("hidden");
+    } else {
+        empty.classList.add("hidden");
+        grid.innerHTML = state.watchlist.map(a => createAuctionCard(a)).join("");
+    }
+}
+
+async function renderInvoices() {
+    if (!state.token) return;
+    try {
+        state.invoices = await api("/api/invoices");
+    } catch (e) { state.invoices = []; }
+    const tbody = document.getElementById("invoicesTableBody");
+    const empty = document.getElementById("invoicesEmpty");
+    if (state.invoices.length === 0) {
+        tbody.innerHTML = "";
+        empty.classList.remove("hidden");
+    } else {
+        empty.classList.add("hidden");
+        tbody.innerHTML = state.invoices.map(inv => `
+            <tr>
+                <td>${escapeHtml(inv.id)}</td>
+                <td>${escapeHtml(inv.auctionId)}</td>
+                <td>${escapeHtml(inv.itemName)}</td>
+                <td>${formatMoney(inv.amount, inv.currency)}</td>
+                <td>${new Date(inv.createdAt).toLocaleDateString()}</td>
+                <td><span class="status-pill">Paid</span></td>
+            </tr>
+        `).join("");
+    }
+}
+
+function renderHistory() {
+    const userId = state.session?.userId;
+    const all = state.auctions.filter(a => {
+        if (state.historyTab === 'bids') return a.bidHistory.some(b => b.bidderId === userId);
+        if (state.historyTab === 'won') return a.state === 'FINISHED' && a.highestBidderId === userId;
+        if (state.historyTab === 'sold') return a.ownerId === userId && (a.state === 'FINISHED' || a.state === 'CANCELED');
+        return a.bidHistory.some(b => b.bidderId === userId) || a.ownerId === userId;
+    });
+    const grid = document.getElementById("historyGrid");
+    const empty = document.getElementById("historyEmpty");
+    if (all.length === 0) {
+        grid.innerHTML = "";
+        empty.classList.remove("hidden");
+    } else {
+        empty.classList.add("hidden");
+        grid.innerHTML = all.map(a => {
+            const myBid = a.bidHistory.find(b => b.bidderId === userId);
+            const tag = a.ownerId === userId ? '<span class="tag-top-right" style="background:var(--success)">SOLD</span>' :
+                        myBid ? '<span class="tag-top-right" style="background:var(--info)">BID</span>' : '';
+            return createAuctionCard(a);
+        }).join("");
+    }
 }
 
 function renderAdminDashboard() {
     els.adminGrid.innerHTML = state.auctions.slice(0, 4).map(a => createAuctionCard(a)).join("");
     els.statAdminActive.textContent = state.auctions.filter(a => a.state === 'RUNNING').length;
     els.statAdminTotal.textContent = state.auctions.length;
-    els.statAdminUsers.textContent = state.users.length || 259;
+    els.statAdminUsers.textContent = state.users.length;
+    if (els.userTableBody) {
+        els.userTableBody.innerHTML = state.users.map(user => `
+            <tr>
+                <td>${escapeHtml(user.username)}</td>
+                <td><span class="status-pill ${escapeHtml(user.role)}">${escapeHtml(user.role)}</span></td>
+                <td>${user.auctionLimit}</td>
+                <td class="actions-cell">
+                    <button class="btn-secondary edit-limit-btn" data-username="${escapeHtml(user.username)}">Edit Limit</button>
+                    <button class="btn-secondary delete-user-btn" data-username="${escapeHtml(user.username)}" style="color: var(--danger)">Delete</button>
+                </td>
+            </tr>
+        `).join("");
+        els.userTableBody.querySelectorAll('.edit-limit-btn').forEach(btn => {
+            btn.addEventListener('click', () => updateLimit(btn.dataset.username));
+        });
+        els.userTableBody.querySelectorAll('.delete-user-btn').forEach(btn => {
+            btn.addEventListener('click', () => deleteUser(btn.dataset.username));
+        });
+    }
+    const adminRefundsLink = document.getElementById("adminRefundsLink");
+    if (adminRefundsLink) adminRefundsLink.classList.toggle("hidden", state.session?.role !== "ADMIN");
+}
+
+async function renderAdminRefunds() {
+    if (!state.token || state.session?.role !== "ADMIN") return;
+    let refunds = [];
+    try {
+        refunds = await api("/api/admin/refunds");
+    } catch (e) { refunds = []; }
+    const tbody = document.getElementById("refundsTableBody");
+    const empty = document.getElementById("refundsEmpty");
+    if (!refunds || refunds.length === 0) {
+        tbody.innerHTML = "";
+        empty.classList.remove("hidden");
+    } else {
+        empty.classList.add("hidden");
+        tbody.innerHTML = refunds.map(r => `
+            <tr>
+                <td>${escapeHtml(r.id)}</td>
+                <td>${escapeHtml(r.auctionId || '-')}</td>
+                <td>${escapeHtml(r.username || '-')}</td>
+                <td>${formatMoney(r.amount || 0, 'VND')}</td>
+                <td>${escapeHtml(r.reason || '-')}</td>
+                <td><span class="status-pill ${escapeHtml(r.status || 'PENDING')}">${escapeHtml(r.status || 'PENDING')}</span></td>
+                <td class="actions-cell">
+                    ${(r.status === 'PENDING') ? `
+                        <button class="btn-secondary approve-refund-btn" data-refund-id="${escapeHtml(r.id)}" style="color: var(--success); border-color: var(--success);">Approve</button>
+                        <button class="btn-secondary reject-refund-btn" data-refund-id="${escapeHtml(r.id)}" style="color: var(--danger); border-color: var(--danger);">Reject</button>
+                    ` : '-'}
+                </td>
+            </tr>
+        `).join("");
+        tbody.querySelectorAll('.approve-refund-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                try {
+                    await api(`/api/admin/refunds/${btn.dataset.refundId}`, {
+                        method: "PUT",
+                        body: JSON.stringify({ action: "approve" })
+                    });
+                    notify("Refund approved", "success");
+                    renderAdminRefunds();
+                } catch (e) { notify(e.message, "danger"); }
+            });
+        });
+        tbody.querySelectorAll('.reject-refund-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                try {
+                    await api(`/api/admin/refunds/${btn.dataset.refundId}`, {
+                        method: "PUT",
+                        body: JSON.stringify({ action: "reject" })
+                    });
+                    notify("Refund rejected", "info");
+                    renderAdminRefunds();
+                } catch (e) { notify(e.message, "danger"); }
+            });
+        });
+    }
+}
+    const adminRefundsLink = document.getElementById("adminRefundsLink");
+    if (adminRefundsLink) adminRefundsLink.classList.toggle("hidden", state.session?.role !== "ADMIN");
+}
+
+async function renderAdminRefunds() {
+    if (!state.token || state.session?.role !== "ADMIN") return;
+    let refunds = [];
+    try {
+        refunds = await api("/api/admin/refunds");
+    } catch (e) { refunds = []; }
+    const tbody = document.getElementById("refundsTableBody");
+    const empty = document.getElementById("refundsEmpty");
+    if (!refunds || refunds.length === 0) {
+        tbody.innerHTML = "";
+        empty.classList.remove("hidden");
+    } else {
+        empty.classList.add("hidden");
+        tbody.innerHTML = refunds.map(r => `
+            <tr>
+                <td>${escapeHtml(r.id)}</td>
+                <td>${escapeHtml(r.auctionId || '-')}</td>
+                <td>${escapeHtml(r.username || '-')}</td>
+                <td>${formatMoney(r.amount || 0, 'VND')}</td>
+                <td>${escapeHtml(r.reason || '-')}</td>
+                <td><span class="status-pill ${escapeHtml(r.status || 'PENDING')}">${escapeHtml(r.status || 'PENDING')}</span></td>
+                <td class="actions-cell">
+                    ${(r.status === 'PENDING') ? `
+                        <button class="btn-secondary approve-refund-btn" data-refund-id="${escapeHtml(r.id)}" style="color: var(--success); border-color: var(--success);">Approve</button>
+                        <button class="btn-secondary reject-refund-btn" data-refund-id="${escapeHtml(r.id)}" style="color: var(--danger); border-color: var(--danger);">Reject</button>
+                    ` : '-'}
+                </td>
+            </tr>
+        `).join("");
+        tbody.querySelectorAll('.approve-refund-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                try {
+                    await api(`/api/admin/refunds/${btn.dataset.refundId}`, {
+                        method: "PUT",
+                        body: JSON.stringify({ action: "approve" })
+                    });
+                    notify("Refund approved", "success");
+                    renderAdminRefunds();
+                } catch (e) { notify(e.message, "danger"); }
+            });
+        });
+        tbody.querySelectorAll('.reject-refund-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                try {
+                    await api(`/api/admin/refunds/${btn.dataset.refundId}`, {
+                        method: "PUT",
+                        body: JSON.stringify({ action: "reject" })
+                    });
+                    notify("Refund rejected", "info");
+                    renderAdminRefunds();
+                } catch (e) { notify(e.message, "danger"); }
+            });
+        });
+    }
+}
+
+async function renderNotifications() {
+    if (!state.token) return;
+    try {
+        state.notifications = await api("/api/notifications");
+    } catch (e) { state.notifications = []; }
+    const list = document.getElementById("notificationsList");
+    const empty = document.getElementById("notificationsEmpty");
+    if (state.notifications.length === 0) {
+        list.innerHTML = "";
+        empty.classList.remove("hidden");
+    } else {
+        empty.classList.add("hidden");
+        list.innerHTML = state.notifications.map(n => `
+            <div class="notification-item ${n.read ? 'read' : 'unread'}" data-notif-id="${escapeHtml(n.id)}">
+                <div class="notif-icon">${n.type === 'PAYMENT' ? '💰' : n.type === 'BID' ? '🔨' : n.type === 'AUCTION' ? '📦' : '🔔'}</div>
+                <div class="notif-content">
+                    <p>${escapeHtml(n.message)}</p>
+                    <span class="subtle">${new Date(n.createdAt).toLocaleString()}</span>
+                </div>
+                ${!n.read ? `<button class="btn-secondary mark-read-btn" data-notif-id="${escapeHtml(n.id)}" style="font-size:0.75rem; padding:0.25rem 0.5rem;">Mark Read</button>` : ''}
+            </div>
+        `).join("");
+        list.querySelectorAll('.mark-read-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                try {
+                    await api(`/api/notifications/${btn.dataset.notifId}/read`, { method: "PUT" });
+                    renderNotifications();
+                    loadNotifications();
+                } catch (e) { notify(e.message, "danger"); }
+            });
+        });
+    }
+}
+
+function renderAccount() {
+    const twoFaStatus = document.getElementById("twoFaStatus");
+    const enableBtn = document.getElementById("enable2faBtn");
+    const disableBtn = document.getElementById("disable2faBtn");
+    if (state.session?.twoFaEnabled) {
+        twoFaStatus.textContent = "2FA is enabled";
+        twoFaStatus.style.color = "var(--success)";
+        enableBtn.classList.add("hidden");
+        disableBtn.classList.remove("hidden");
+    } else {
+        twoFaStatus.textContent = "2FA is not enabled";
+        twoFaStatus.style.color = "";
+        enableBtn.classList.remove("hidden");
+        disableBtn.classList.add("hidden");
+    }
 }
 
 function openDetail(id) {
     state.selectedAuctionId = id;
     const auction = state.auctions.find(a => a.id === id);
     if (!auction) return;
-
     els.detailTitle.textContent = auction.itemName;
     els.detailDesc.textContent = auction.description;
-    els.detailPrice.textContent = formatMoney(auction.currentPrice);
-    els.detailStartPrice.textContent = `Started at ${formatMoney(auction.startingPrice)}`;
+    els.detailPrice.textContent = formatMoney(auction.currentPrice, auction.currency);
+    els.detailStartPrice.textContent = `Started at ${formatMoney(auction.startingPrice, auction.currency)}`;
     els.detailBidCount.textContent = auction.bidCount;
     els.detailCategory.textContent = auction.itemType;
     els.sellerName.textContent = auction.ownerUsername;
-    els.sellerAvatar.textContent = auction.ownerUsername[0].toUpperCase();
-    
-    const imageHtml = auction.imageFilename ? 
-        `<img src="/uploads/${auction.imageFilename}" style="width:100%; height:100%; object-fit:cover; border-radius:20px;">` : 
+    els.sellerAvatar.textContent = auction.ownerUsername.length > 0 ? auction.ownerUsername[0].toUpperCase() : '?';
+    const imageHtml = auction.imageFilename ?
+        `<img src="/uploads/${escapeHtml(auction.imageFilename)}" style="width:100%; height:100%; object-fit:cover; border-radius:20px;">` :
         getIcon(auction.itemType);
-    els.detailImage.innerHTML = `${imageHtml}<div class="state-overlay">${auction.state}</div>`;
-
-    const isEnded = auction.state === 'FINISHED';
+    els.detailImage.innerHTML = imageHtml;
+    const isEnded = auction.state === 'FINISHED' || auction.state === 'CANCELED';
     els.timerSection.classList.toggle('hidden', isEnded);
     els.bidActions.classList.toggle('hidden', isEnded || auction.ownerId === state.session?.userId);
     els.endedMsg.classList.toggle('hidden', !isEnded);
     els.winnerSection.classList.toggle('hidden', !isEnded || !auction.highestBidderUsername);
-
+    const editBtn = document.getElementById("editAuctionBtn");
+    if (editBtn) {
+        const canEdit = auction.ownerId === state.session?.userId && auction.bidCount === 0 && auction.state === 'RUNNING';
+        editBtn.classList.toggle('hidden', !canEdit);
+    }
+    const watchBtn = document.getElementById("watchBtn");
+    if (watchBtn) {
+        const isWatching = state.watchlist.some(w => w.id === auction.id);
+        watchBtn.textContent = isWatching ? 'Unwatch' : 'Watch';
+        watchBtn.classList.toggle('hidden', !state.session || auction.ownerId === state.session?.userId);
+    }
     if (isEnded && auction.highestBidderUsername) {
         document.getElementById("winnerName").textContent = auction.highestBidderUsername;
-        document.getElementById("winnerBid").textContent = formatMoney(auction.currentPrice);
+        document.getElementById("winnerBid").textContent = formatMoney(auction.currentPrice, auction.currency);
     }
-
-    els.bidHistoryList.innerHTML = auction.bidHistory.length ? 
+    const paymentSection = document.getElementById("paymentSection");
+    const payNowBtn = document.getElementById("payNowBtn");
+    const markReceivedBtn = document.getElementById("markReceivedBtn");
+    const paymentStatusText = document.getElementById("paymentStatusText");
+    if (paymentSection) {
+        const isWinner = auction.highestBidderId === state.session?.userId;
+        const isOwner = auction.ownerId === state.session?.userId;
+        if (isEnded && isWinner && !isOwner) {
+            paymentSection.classList.remove("hidden");
+            if (auction.fulfillmentStatus === 'paid' || auction.fulfillmentStatus === 'delivered') {
+                paymentStatusText.textContent = "Payment confirmed";
+                paymentStatusText.style.color = "var(--success)";
+                payNowBtn.classList.add("hidden");
+                markReceivedBtn.classList.toggle("hidden", auction.fulfillmentStatus === 'delivered');
+            } else if (auction.fulfillmentStatus === 'awaiting_payment') {
+                paymentStatusText.textContent = "Awaiting payment";
+                paymentStatusText.style.color = "var(--warning)";
+                payNowBtn.classList.remove("hidden");
+                markReceivedBtn.classList.add("hidden");
+            } else {
+                paymentStatusText.textContent = "Payment not initiated";
+                paymentStatusText.style.color = "";
+                payNowBtn.classList.remove("hidden");
+                markReceivedBtn.classList.add("hidden");
+            }
+        } else {
+            paymentSection.classList.add("hidden");
+        }
+    }
+    const refundSection = document.getElementById("refundSection");
+    const requestRefundBtn = document.getElementById("requestRefundBtn");
+    const refundStatusText = document.getElementById("refundStatusText");
+    if (refundSection) {
+        const isWinner = auction.highestBidderId === state.session?.userId;
+        const isOwner = auction.ownerId === state.session?.userId;
+        if (isEnded && isWinner && !isOwner && (auction.fulfillmentStatus === 'paid' || auction.fulfillmentStatus === 'delivered')) {
+            refundSection.classList.remove("hidden");
+            if (auction.fulfillmentStatus === 'paid') {
+                refundStatusText.textContent = "You can request a refund if needed.";
+                refundStatusText.style.color = "";
+                requestRefundBtn.classList.remove("hidden");
+            } else if (auction.fulfillmentStatus === 'delivered') {
+                refundStatusText.textContent = "Item delivered. Refund requests may still be possible.";
+                refundStatusText.style.color = "";
+                requestRefundBtn.classList.remove("hidden");
+            }
+        } else {
+            refundSection.classList.add("hidden");
+        }
+    }
+    const buyNowSection = document.getElementById("buyNowSection");
+    const buyNowBtn = document.getElementById("buyNowBtn");
+    const buyNowPriceLabel = document.getElementById("buyNowPriceLabel");
+    if (buyNowSection && buyNowBtn) {
+        const isOwner = auction.ownerId === state.session?.userId;
+        const isRunning = auction.state === 'RUNNING';
+        if (isRunning && !isOwner && auction.buyItNowPrice > 0) {
+            buyNowSection.classList.remove("hidden");
+            buyNowPriceLabel.textContent = formatMoney(auction.buyItNowPrice, auction.currency);
+        } else {
+            buyNowSection.classList.add("hidden");
+        }
+    }
+    const refundSection = document.getElementById("refundSection");
+    const requestRefundBtn = document.getElementById("requestRefundBtn");
+    const refundStatusText = document.getElementById("refundStatusText");
+    if (refundSection) {
+        const isWinner = auction.highestBidderId === state.session?.userId;
+        const isOwner = auction.ownerId === state.session?.userId;
+        if (isEnded && isWinner && !isOwner && (auction.fulfillmentStatus === 'paid' || auction.fulfillmentStatus === 'delivered')) {
+            refundSection.classList.remove("hidden");
+            if (auction.fulfillmentStatus === 'paid') {
+                refundStatusText.textContent = "You can request a refund if needed.";
+                refundStatusText.style.color = "";
+                requestRefundBtn.classList.remove("hidden");
+            } else if (auction.fulfillmentStatus === 'delivered') {
+                refundStatusText.textContent = "Item delivered. Refund requests may still be possible.";
+                refundStatusText.style.color = "";
+                requestRefundBtn.classList.remove("hidden");
+            }
+        } else {
+            refundSection.classList.add("hidden");
+        }
+    }
+    const buyNowSection = document.getElementById("buyNowSection");
+    const buyNowBtn = document.getElementById("buyNowBtn");
+    const buyNowPriceLabel = document.getElementById("buyNowPriceLabel");
+    if (buyNowSection && buyNowBtn) {
+        const isOwner = auction.ownerId === state.session?.userId;
+        const isRunning = auction.state === 'RUNNING';
+        if (isRunning && !isOwner && auction.buyItNowPrice > 0) {
+            buyNowSection.classList.remove("hidden");
+            buyNowPriceLabel.textContent = formatMoney(auction.buyItNowPrice, auction.currency);
+        } else {
+            buyNowSection.classList.add("hidden");
+        }
+    }
+    els.bidHistoryList.innerHTML = auction.bidHistory.length ?
         [...auction.bidHistory].reverse().map((bid, i) => `
             <div class="bid-item">
                 <div class="bidder-meta">
-                    <div class="avatar">${bid.bidderUsername[0]}</div>
+                    <div class="avatar">${escapeHtml((bid.bidderUsername || '?')[0].toUpperCase())}</div>
                     <div>
-                        <strong>${bid.bidderUsername}</strong> ${i === 0 ? '<span class="leading-badge">LEADING</span>' : ''}
+                        <strong>${escapeHtml(bid.bidderUsername)}</strong> ${i === 0 ? '<span class="leading-badge">LEADING</span>' : ''}
                         <div class="subtle">${new Date(bid.timestamp).toLocaleString()}</div>
                     </div>
                 </div>
-                <strong>${formatMoney(bid.amount)}</strong>
+                <strong>${formatMoney(bid.amount, auction.currency)}</strong>
             </div>
         `).join("") : '<p class="subtle">No bids yet.</p>';
-
-    els.watcherList.innerHTML = Array.from({length: auction.watchingCount % 5 + 1}).map(() => `
+    els.watcherList.innerHTML = Array.from({length: Math.min(auction.watchingCount, 3)}).map(() => `
         <div class="avatar" title="User">U</div>
-    `).join("") + (auction.watchingCount > 0 ? `<span class="subtle">+${auction.watchingCount} more</span>` : '');
-
+    `).join("") + (auction.watchingCount > 3 ? `<span class="subtle">+${auction.watchingCount - 3} more</span>` : '');
     switchView('detail');
     updateCountdown();
 }
@@ -292,25 +695,37 @@ function updateCountdown() {
     if (state.currentView !== 'detail' || !state.selectedAuctionId) return;
     const auction = state.auctions.find(a => a.id === state.selectedAuctionId);
     if (!auction || auction.state === 'FINISHED') return;
-
     const delta = auction.endTime - Date.now();
-    if (delta <= 0) {
-        loadAuctions();
-        return;
-    }
-
+    if (delta <= 0) { loadAuctions(); return; }
     const d = Math.floor(delta / (1000 * 60 * 60 * 24));
     const h = Math.floor((delta % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const m = Math.floor((delta % (1000 * 60 * 60)) / (1000 * 60));
     const s = Math.floor((delta % (1000 * 60)) / 1000);
-
-    document.getElementById("days").textContent = d.toString().padStart(2, '0');
-    document.getElementById("hours").textContent = h.toString().padStart(2, '0');
-    document.getElementById("mins").textContent = m.toString().padStart(2, '0');
-    document.getElementById("secs").textContent = s.toString().padStart(2, '0');
+    const daysEl = document.getElementById("days");
+    const hoursEl = document.getElementById("hours");
+    const minsEl = document.getElementById("mins");
+    const secsEl = document.getElementById("secs");
+    if (daysEl) daysEl.textContent = d.toString().padStart(2, '0');
+    if (hoursEl) hoursEl.textContent = h.toString().padStart(2, '0');
+    if (minsEl) minsEl.textContent = m.toString().padStart(2, '0');
+    if (secsEl) secsEl.textContent = s.toString().padStart(2, '0');
 }
 
-// --- Event Listeners ---
+async function loadNotifications() {
+    if (!state.token) return;
+    try {
+        const notifs = await api("/api/notifications");
+        const unread = notifs.filter(n => !n.read).length;
+        if (els.notifBadge) {
+            if (unread > 0) {
+                els.notifBadge.textContent = unread > 9 ? '9+' : unread;
+                els.notifBadge.classList.remove("hidden");
+            } else {
+                els.notifBadge.classList.add("hidden");
+            }
+        }
+    } catch (e) {}
+}
 
 document.querySelectorAll('[data-view]').forEach(el => {
     el.addEventListener('click', e => {
@@ -319,34 +734,12 @@ document.querySelectorAll('[data-view]').forEach(el => {
     });
 });
 
-// Logo Home Navigation
 document.getElementById("goHome").addEventListener('click', () => {
-    if (!state.session) {
-        switchView('landing');
-    } else {
-        switchView('dashboard');
-    }
+    if (!state.session) { switchView('landing'); } else { switchView('dashboard'); }
 });
 
-// Mobile menu toggle
 document.getElementById("mobileMenuBtn")?.addEventListener('click', () => {
     notify("Mobile menu coming soon in the next update!", "info");
-});
-
-// Placeholder links
-document.querySelectorAll('.nav-right #guestNav .nav-link').forEach(link => {
-    link.addEventListener('click', (e) => {
-        if (!link.id && !link.dataset.view) {
-            e.preventDefault();
-            notify(`${link.textContent} page coming soon!`, "info");
-        }
-    });
-});
-
-// Admin "All Users" placeholder
-document.querySelector('#adminView .btn-primary')?.addEventListener('click', () => {
-    const userCount = state.users.length || 259;
-    notify(`Total registered users: ${userCount}`, "success");
 });
 
 document.getElementById("openLogin").addEventListener('click', () => openAuth('login'));
@@ -355,27 +748,41 @@ document.getElementById("heroSignIn").addEventListener('click', () => openAuth('
 document.getElementById("heroStart").addEventListener('click', () => openAuth('register'));
 document.getElementById("detailBack").addEventListener('click', () => switchView('auctions'));
 
+document.getElementById("notifBell")?.addEventListener('click', () => {
+    switchView('notifications');
+});
+
+document.getElementById("markAllReadBtn")?.addEventListener('click', async () => {
+    try {
+        for (const n of state.notifications.filter(n => !n.read)) {
+            await api(`/api/notifications/${n.id}/read`, { method: "PUT" });
+        }
+        renderNotifications();
+        loadNotifications();
+        notify("All notifications marked as read", "success");
+    } catch (e) { notify(e.message, "danger"); }
+});
+
 function openAuth(mode) {
+    state.authMode = mode;
     const isReg = mode === 'register';
     els.authTitle.textContent = isReg ? 'Create Account' : 'Sign In';
     els.authSubmit.textContent = isReg ? 'Create Account' : 'Sign In';
     els.authToggleText.textContent = isReg ? 'Already have an account?' : "Don't have an account?";
     els.authToggleLink.textContent = isReg ? 'Sign in' : 'Sign up';
-    els.roleGroup.classList.toggle('hidden', !isReg);
     switchView('auth');
 }
 
 els.authToggleLink.addEventListener('click', e => {
     e.preventDefault();
-    openAuth(els.authTitle.textContent.includes('Sign In') ? 'register' : 'login');
+    openAuth(state.authMode === 'login' ? 'register' : 'login');
 });
 
 els.authForm.addEventListener('submit', async e => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData.entries());
-    const isReg = !els.roleGroup.classList.contains('hidden');
-    
+    const isReg = state.authMode === 'register';
     try {
         const session = await api(isReg ? "/api/register" : "/api/login", {
             method: "POST",
@@ -383,10 +790,9 @@ els.authForm.addEventListener('submit', async e => {
         });
         saveSession(session);
         renderNav();
-await loadAuctions();
-switchView('dashboard');
-window.location.reload();
+        switchView('dashboard');
         notify(isReg ? "Account created!" : "Welcome back!", "success");
+        await loadAuctions();
     } catch (err) {
         notify(err.message, "danger");
     }
@@ -402,17 +808,18 @@ els.logoutButton.addEventListener('click', async () => {
 
 document.getElementById("placeBidBtn").addEventListener('click', async () => {
     const amount = Number(document.getElementById("bidInput").value);
+    if (!amount || amount <= 0) { notify("Please enter a valid bid amount", "danger"); return; }
+    if (!state.token) { notify("Please sign in to place a bid", "danger"); return; }
     try {
         await api(`/api/auctions/${state.selectedAuctionId}/bid`, {
             method: "POST",
             body: JSON.stringify({ amount })
         });
         notify("Bid placed successfully!", "success");
+        document.getElementById("bidInput").value = "";
         await loadAuctions();
         openDetail(state.selectedAuctionId);
-    } catch (err) {
-        notify(err.message, "danger");
-    }
+    } catch (err) { notify(err.message, "danger"); }
 });
 
 document.getElementById("autoBidBtn").addEventListener('click', async () => {
@@ -425,10 +832,149 @@ document.getElementById("autoBidBtn").addEventListener('click', async () => {
         });
         notify("Auto-bid configured", "success");
         await loadAuctions();
-    } catch (err) {
-        notify(err.message, "danger");
-    }
+    } catch (err) { notify(err.message, "danger"); }
 });
+
+document.getElementById("watchBtn")?.addEventListener('click', async () => {
+    const auctionId = state.selectedAuctionId;
+    if (!auctionId) return;
+    const isWatching = state.watchlist.some(w => w.id === auctionId);
+    try {
+        if (isWatching) {
+            await api(`/api/watchlist/${auctionId}`, { method: "DELETE" });
+            notify("Removed from watchlist", "info");
+        } else {
+            await api("/api/watchlist", { method: "POST", body: JSON.stringify({ auctionId }) });
+            notify("Added to watchlist", "success");
+        }
+        await loadAuctions();
+        openDetail(auctionId);
+    } catch (err) { notify(err.message, "danger"); }
+});
+
+document.getElementById("payNowBtn")?.addEventListener('click', async () => {
+    const auctionId = state.selectedAuctionId;
+    if (!auctionId) return;
+    const auction = state.auctions.find(a => a.id === auctionId);
+    if (!auction) return;
+    try {
+        const result = await api(`/api/auctions/${auctionId}/pay`, {
+            method: "POST",
+            body: JSON.stringify({ amount: auction.currentPrice })
+        });
+        if (result.orderUrl) {
+            notify("Redirecting to ZaloPay...", "info");
+            window.location.href = result.orderUrl;
+        } else {
+            notify("Payment initiated: " + (result.message || "Please wait for confirmation"), "success");
+            await loadAuctions();
+            openDetail(auctionId);
+        }
+    } catch (err) { notify(err.message, "danger"); }
+});
+
+document.getElementById("markReceivedBtn")?.addEventListener('click', async () => {
+    const auctionId = state.selectedAuctionId;
+    if (!auctionId) return;
+    try {
+        await api(`/api/auctions/${auctionId}/mark-received`, { method: "POST" });
+        notify("Item marked as received!", "success");
+        await loadAuctions();
+        openDetail(auctionId);
+    } catch (err) { notify(err.message, "danger"); }
+});
+
+document.getElementById("buyNowBtn")?.addEventListener('click', async () => {
+    const auctionId = state.selectedAuctionId;
+    if (!auctionId) return;
+    if (!confirm("Buy this item now at the listed price?")) return;
+    try {
+        const result = await api(`/api/auctions/${auctionId}/buy-now`, { method: "POST" });
+        if (result.orderUrl) {
+            notify("Redirecting to ZaloPay...", "info");
+            window.location.href = result.orderUrl;
+        } else {
+            notify("Buy-it-now purchase successful!", "success");
+            await loadAuctions();
+            openDetail(auctionId);
+        }
+    } catch (err) { notify(err.message, "danger"); }
+});
+
+document.getElementById("requestRefundBtn")?.addEventListener('click', async () => {
+    const auctionId = state.selectedAuctionId;
+    if (!auctionId) return;
+    const reason = prompt("Enter refund reason:");
+    if (!reason) return;
+    try {
+        await api(`/api/auctions/${auctionId}/refund`, {
+            method: "POST",
+            body: JSON.stringify({ reason })
+        });
+        notify("Refund request submitted!", "success");
+        await loadAuctions();
+        openDetail(auctionId);
+    } catch (err) { notify(err.message, "danger"); }
+});
+
+document.getElementById("buyNowBtn")?.addEventListener('click', async () => {
+    const auctionId = state.selectedAuctionId;
+    if (!auctionId) return;
+    if (!confirm("Buy this item now at the listed price?")) return;
+    try {
+        const result = await api(`/api/auctions/${auctionId}/buy-now`, { method: "POST" });
+        if (result.orderUrl) {
+            notify("Redirecting to ZaloPay...", "info");
+            window.location.href = result.orderUrl;
+        } else {
+            notify("Buy-it-now purchase successful!", "success");
+            await loadAuctions();
+            openDetail(auctionId);
+        }
+    } catch (err) { notify(err.message, "danger"); }
+});
+
+document.getElementById("requestRefundBtn")?.addEventListener('click', async () => {
+    const auctionId = state.selectedAuctionId;
+    if (!auctionId) return;
+    const reason = prompt("Enter refund reason:");
+    if (!reason) return;
+    try {
+        await api(`/api/auctions/${auctionId}/refund`, {
+            method: "POST",
+            body: JSON.stringify({ reason })
+        });
+        notify("Refund request submitted!", "success");
+        await loadAuctions();
+        openDetail(auctionId);
+    } catch (err) { notify(err.message, "danger"); }
+});
+
+function openEdit() {
+    const auction = state.auctions.find(a => a.id === state.selectedAuctionId);
+    if (!auction) return;
+    state.editingAuctionId = auction.id;
+    document.getElementById("auctionFormTitle").textContent = "Edit Auction";
+    document.getElementById("submitAuctionBtn").textContent = "Update Auction";
+    const form = document.getElementById("auctionForm");
+    form.elements["name"].value = auction.itemName;
+    form.elements["description"].value = auction.description;
+    form.elements["itemType"].value = auction.itemType;
+    form.elements["startingPrice"].value = auction.startingPrice;
+    const delta = auction.endTime - Date.now();
+    const remainingMins = Math.max(1, Math.floor(delta / 60000));
+    form.elements["durationMinutes"].value = remainingMins;
+    if (form.elements["currency"]) form.elements["currency"].value = auction.currency || "VND";
+    if (form.elements["extraInfo"]) form.elements["extraInfo"].value = auction.extraValue || "";
+    if (form.elements["buyItNowPrice"]) form.elements["buyItNowPrice"].value = auction.buyItNowPrice || 0;
+    if (form.elements["reservePrice"]) form.elements["reservePrice"].value = auction.reservePrice || 0;
+    switchView('create');
+}
+
+window.openDetail = openDetail;
+window.deleteUser = deleteUser;
+window.updateLimit = updateLimit;
+window.openEdit = openEdit;
 
 document.getElementById("auctionForm").addEventListener('submit', async e => {
     e.preventDefault();
@@ -436,7 +982,12 @@ document.getElementById("auctionForm").addEventListener('submit', async e => {
     const body = Object.fromEntries(formData.entries());
     body.startingPrice = Number(body.startingPrice);
     body.durationMinutes = Number(body.durationMinutes);
-    
+    body.buyItNowPrice = Number(body.buyItNowPrice || 0);
+    body.reservePrice = Number(body.reservePrice || 0);
+    const scheduledInput = document.getElementById("scheduledStartTimeInput");
+    if (scheduledInput && scheduledInput.value) {
+        body.scheduledStartTime = new Date(scheduledInput.value).getTime();
+    }
     const fileInput = document.getElementById("imageInput");
     if (fileInput && fileInput.files.length > 0) {
         try {
@@ -445,7 +996,10 @@ document.getElementById("auctionForm").addEventListener('submit', async e => {
             const uploadResult = await api("/api/upload", {
                 method: "POST",
                 body: buffer,
-                headers: { "Content-Type": "application/octet-stream" }
+                headers: {
+                    "Content-Type": "application/octet-stream",
+                    "Authorization": `Bearer ${state.token}`
+                }
             });
             body.imageFilename = uploadResult.filename;
         } catch (err) {
@@ -453,60 +1007,159 @@ document.getElementById("auctionForm").addEventListener('submit', async e => {
             return;
         }
     }
-    
     try {
-        await api("/api/auctions", { method: "POST", body: JSON.stringify(body) });
-        notify("Auction created successfully!", "success");
+        let endpoint = "/api/auctions";
+        let method = "POST";
+        if (state.editingAuctionId) {
+            endpoint = `/api/auctions/${state.editingAuctionId}`;
+            method = "PUT";
+        }
+        await api(endpoint, { method: method, body: JSON.stringify(body) });
+        notify(state.editingAuctionId ? "Auction updated successfully!" : "Auction created successfully!", "success");
+        state.editingAuctionId = null;
+        document.getElementById("auctionFormTitle").textContent = "Create New Auction";
+        document.getElementById("submitAuctionBtn").textContent = "Create Auction";
         e.target.reset();
-await loadAuctions();
-switchView('dashboard');
-window.location.reload();
-    } catch (err) {
-        notify(err.message, "danger");
+        await loadAuctions();
+        switchView('dashboard');
+    } catch (err) { notify(err.message, "danger"); }
+});
+            body.imageFilename = uploadResult.filename;
+        } catch (err) {
+            notify("Image upload failed: " + err.message, "danger");
+            return;
+        }
     }
+    try {
+        let endpoint = "/api/auctions";
+        let method = "POST";
+        if (state.editingAuctionId) {
+            endpoint = `/api/auctions/${state.editingAuctionId}`;
+            method = "PUT";
+        }
+        await api(endpoint, { method: method, body: JSON.stringify(body) });
+        notify(state.editingAuctionId ? "Auction updated successfully!" : "Auction created successfully!", "success");
+        state.editingAuctionId = null;
+        document.getElementById("auctionFormTitle").textContent = "Create New Auction";
+        document.getElementById("submitAuctionBtn").textContent = "Create Auction";
+        e.target.reset();
+        await loadAuctions();
+        switchView('dashboard');
+    } catch (err) { notify(err.message, "danger"); }
+});
+
+document.getElementById("passwordForm")?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    try {
+        await api("/api/account/password", {
+            method: "PUT",
+            body: JSON.stringify(Object.fromEntries(formData.entries()))
+        });
+        notify("Password updated successfully!", "success");
+        e.target.reset();
+    } catch (err) { notify(err.message, "danger"); }
+});
+
+document.getElementById("deleteAccountBtn")?.addEventListener('click', async () => {
+    const password = prompt("Enter your password to confirm account deletion:");
+    if (!password) return;
+    if (!confirm("This action is permanent and cannot be undone. Continue?")) return;
+    try {
+        await api("/api/account", { method: "DELETE", body: JSON.stringify({ password }) });
+        saveSession(null);
+        renderNav();
+        switchView('landing');
+        notify("Account deleted successfully", "success");
+    } catch (err) { notify(err.message, "danger"); }
+});
+
+document.getElementById("enable2faBtn")?.addEventListener('click', async () => {
+    try {
+        const setup = await api("/api/account/2fa/setup", { method: "POST" });
+        state.twoFaSecret = setup.secret;
+        document.getElementById("twoFaSetup").classList.remove("hidden");
+        document.getElementById("twoFaQrCode").innerHTML = `<p class="subtle">Secret: <code>${escapeHtml(setup.secret)}</code></p>`;
+    } catch (err) { notify(err.message, "danger"); }
+});
+
+document.getElementById("confirm2faBtn")?.addEventListener('click', async () => {
+    const code = document.getElementById("twoFaCodeInput").value;
+    if (!code || code.length !== 6) { notify("Enter a valid 6-digit code", "danger"); return; }
+    try {
+        await api("/api/account/2fa/enable", { method: "POST", body: JSON.stringify({ code }) });
+        notify("2FA enabled!", "success");
+        document.getElementById("twoFaSetup").classList.add("hidden");
+        renderAccount();
+    } catch (err) { notify(err.message, "danger"); }
+});
+
+document.getElementById("disable2faBtn")?.addEventListener('click', async () => {
+    const code = prompt("Enter your current 2FA code to disable:");
+    if (!code) return;
+    try {
+        await api("/api/account/2fa/disable", { method: "POST", body: JSON.stringify({ code }) });
+        notify("2FA disabled", "info");
+        renderAccount();
+    } catch (err) { notify(err.message, "danger"); }
 });
 
 document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
-        state.activeTab = tab.dataset.filter;
-        renderMyBids();
+        if (tab.dataset.filter) { state.activeTab = tab.dataset.filter; renderMyBids(); }
+        if (tab.dataset.myFilter) { state.myAuctionsTab = tab.dataset.myFilter; renderMyAuctions(); }
+        if (tab.dataset.historyFilter) { state.historyTab = tab.dataset.historyFilter; renderHistory(); }
     });
 });
 
-els.searchInput?.addEventListener('input', () => {
-    if (state.currentView === 'auctions') renderAuctions();
-});
-els.categoryFilter?.addEventListener('change', () => {
-    if (state.currentView === 'auctions') renderAuctions();
-});
+els.searchInput?.addEventListener('input', () => { if (state.currentView === 'auctions') renderAuctions(); });
+els.categoryFilter?.addEventListener('change', () => { if (state.currentView === 'auctions') renderAuctions(); });
 
-// --- Real-time Updates (WebSocket) ---
+document.addEventListener('click', (e) => {
+    const watchBtn = e.target.closest('.watch-icon-btn');
+    if (watchBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const auctionId = watchBtn.dataset.watchId;
+        const isWatching = watchBtn.classList.contains('watching');
+        api(isWatching ? `/api/watchlist/${auctionId}` : "/api/watchlist", {
+            method: isWatching ? "DELETE" : "POST",
+            body: isWatching ? null : JSON.stringify({ auctionId })
+        }).then(() => {
+            notify(isWatching ? "Removed from watchlist" : "Added to watchlist", "success");
+            loadAuctions();
+            if (state.currentView === 'watchlist') renderWatchlist();
+        }).catch(err => notify(err.message, "danger"));
+    }
+    const card = e.target.closest('.auction-card');
+    if (card && !e.target.closest('.watch-icon-btn') && !e.target.closest('a') && !e.target.closest('button')) {
+        e.preventDefault();
+        openDetail(card.dataset.auctionId);
+    }
+});
 
 function initWebSocket() {
+    let reloadTimeout = null;
     const ws = new WebSocket(`ws://${window.location.hostname}:8889`);
-
-    ws.onopen = () => console.log("Connected to auction updates");
-    
+    ws.onopen = () => {
+        if (state.token) ws.send("AUTH:" + state.token);
+        console.log("Connected to auction updates");
+    };
     ws.onmessage = (event) => {
         console.log("Update received:", event.data);
-        state.lastEventTime = Date.now();
-        loadAuctions();
-        if (state.currentView === 'detail' && state.selectedAuctionId) {
-            openDetail(state.selectedAuctionId);
-        }
+        if (reloadTimeout) clearTimeout(reloadTimeout);
+        reloadTimeout = setTimeout(() => {
+            loadAuctions();
+            loadNotifications();
+            if (state.currentView === 'detail' && state.selectedAuctionId) openDetail(state.selectedAuctionId);
+            if (state.currentView === 'watchlist') renderWatchlist();
+        }, 500);
     };
-
-    ws.onclose = () => {
-        console.log("WebSocket disconnected. Retrying in 5s...");
-        setTimeout(initWebSocket, 5000);
-    };
-
+    ws.onclose = () => { console.log("WebSocket disconnected. Retrying in 5s..."); setTimeout(initWebSocket, 5000); };
     ws.onerror = (err) => console.error("WebSocket error:", err);
 }
-
-// --- Initialization ---
 
 async function loadAuctions() {
     state.auctions = await api("/api/auctions");
@@ -515,25 +1168,67 @@ async function loadAuctions() {
     }
     if (state.currentView === 'dashboard') renderDashboard();
     if (state.currentView === 'auctions') renderAuctions();
+    if (state.currentView === 'categories') renderCategories();
     if (state.currentView === 'my-bids') renderMyBids();
+    if (state.currentView === 'my-auctions') renderMyAuctions();
     if (state.currentView === 'admin') renderAdminDashboard();
 }
 
-// Global scope for onclick
-window.openDetail = openDetail;
+async function deleteUser(username) {
+    if (!confirm(`Are you sure you want to delete user ${username}?`)) return;
+    try {
+        state.users = await api(`/api/users/${encodeURIComponent(username)}`, { method: "DELETE" });
+        notify("User deleted", "success");
+        renderAdminDashboard();
+    } catch (err) { notify(err.message, "danger"); }
+}
+
+async function updateLimit(username) {
+    const limit = prompt("Enter new auction limit:", "5");
+    if (limit === null) return;
+    try {
+        state.users = await api(`/api/users/${encodeURIComponent(username)}/auction-limit`, {
+            method: "PUT",
+            body: JSON.stringify({ limit: parseInt(limit) })
+        });
+        notify("Limit updated", "success");
+        renderAdminDashboard();
+    } catch (err) { notify(err.message, "danger"); }
+}
 
 async function init() {
     renderNav();
+    initWebSocket();
+    if (state.session && state.session.token) {
+        try {
+            const csrfResp = await api("/api/csrf");
+            state.csrfToken = csrfResp.csrfToken;
+            if (state.csrfToken) localStorage.setItem("auction_csrf", state.csrfToken);
+        } catch (err) {}
+    }
     if (state.session) {
-await loadAuctions();
-switchView('dashboard');
-window.location.reload();
+        try {
+            await loadAuctions();
+            switchView('dashboard');
+        } catch (err) {
+            console.error("Session initialization failed:", err);
+            saveSession(null);
+            renderNav();
+            switchView('landing');
+        }
     } else {
         switchView('landing');
     }
-    
-    setInterval(updateCountdown, 1000);
-    initWebSocket();
+    let countdownInterval = setInterval(updateCountdown, 1000);
+    window.addEventListener('beforeunload', () => clearInterval(countdownInterval));
+    const origSwitchView = switchView;
+    window.switchView = function(view) {
+        origSwitchView(view);
+        if (view !== 'detail') {
+            clearInterval(countdownInterval);
+            countdownInterval = setInterval(updateCountdown, 1000);
+        }
+    };
 }
 
 init();

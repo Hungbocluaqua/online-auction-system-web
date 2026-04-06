@@ -14,15 +14,19 @@
                 <span class="logo-text">Online Auction</span>
             </div>
 
-            <div class="nav-center hidden" id="mainNav">
-                <a href="#" data-view="admin" class="nav-link hidden" id="adminLink">Admin Panel</a>
-                <a href="#" data-view="dashboard" class="nav-link">Dashboard</a>
-                <a href="#" data-view="create" class="nav-link">Create Auction</a>
-                <a href="#" data-view="auctions" class="nav-link">Auctions</a>
-                <a href="#" data-view="my-auctions" class="nav-link hidden" id="sellerLink">My Auctions</a>
-                <a href="#" data-view="my-bids" class="nav-link">My Bids</a>
-                <a href="#" data-view="account" class="nav-link">Account</a>
-            </div>
+                <div class="nav-center hidden" id="mainNav">
+                    <a href="#" data-view="admin" class="nav-link hidden" id="adminLink">Admin Panel</a>
+                    <a href="#" data-view="dashboard" class="nav-link">Dashboard</a>
+                    <a href="#" data-view="create" class="nav-link">Create Auction</a>
+                    <a href="#" data-view="auctions" class="nav-link">Auctions</a>
+                    <a href="#" data-view="categories" class="nav-link">Categories</a>
+                    <a href="#" data-view="my-auctions" class="nav-link hidden" id="sellerLink">My Auctions</a>
+                    <a href="#" data-view="my-bids" class="nav-link">My Bids</a>
+                    <a href="#" data-view="watchlist" class="nav-link">Watchlist</a>
+                    <a href="#" data-view="invoices" class="nav-link">Invoices</a>
+                    <a href="#" data-view="admin-refunds" class="nav-link hidden" id="adminRefundsLink">Refunds</a>
+                    <a href="#" data-view="account" class="nav-link">Account</a>
+                </div>
 
             <div class="nav-right">
                 <div id="guestNav">
@@ -38,6 +42,10 @@
                         <div class="avatar" id="userAvatar">A</div>
                         <span id="userName">User</span>
                     </div>
+                    <button class="icon-btn" id="notifBell" title="Notifications" type="button" style="position:relative;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                        <span id="notifBadge" class="notif-badge hidden">0</span>
+                    </button>
                     <button class="icon-btn" id="logoutButton" title="Logout" type="button">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
                     </button>
@@ -154,7 +162,7 @@
                     <div class="stat-card">
                         <div class="stat-icon purple">T</div>
                         <div class="stat-info">
-                            <p class="subtle">TOTAL AUCTIONS</p>
+                            <p class="subtle">TOTAL LISTINGS</p>
                             <h2 id="statAdminTotal">0</h2>
                         </div>
                     </div>
@@ -190,29 +198,17 @@
                                         <th>Action</th>
                                     </tr>
                                 </thead>
-                                <tbody id="adminUsersTable"></tbody>
+                                <tbody id="userTableBody">
+                                </tbody>
                             </table>
                         </div>
                     </section>
-
+                    
                     <section class="detail-section">
                         <div class="section-header">
-                            <h2>Auctions</h2>
-                            <p class="subtle" id="adminAuctionsCount">0 auctions</p>
+                            <h2>Active Listings</h2>
                         </div>
-                        <div class="table-wrap">
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Item</th>
-                                        <th>Status</th>
-                                        <th>Highest Bidder</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="adminAuctionsTable"></tbody>
-                            </table>
-                        </div>
+                        <div id="adminGrid" class="auction-grid"></div>
                     </section>
                 </div>
             </div>
@@ -229,19 +225,13 @@
                         <input type="text" id="searchInput" placeholder="Search auctions...">
                         <select id="categoryFilter">
                             <option value="All">All Categories</option>
-                            <option value="Electronics">Electronics</option>
-                            <option value="Art">Art</option>
-                            <option value="Vehicle">Vehicle</option>
-                            <option value="Book">Book</option>
-                            <option value="Fashion">Fashion</option>
-                            <option value="Collectible">Collectible</option>
-                            <option value="Property">Property</option>
-                        </select>
-                        <select id="sortFilter">
-                            <option value="newest">Newest</option>
-                            <option value="ending-soon">Ending Soon</option>
-                            <option value="highest-price">Highest Price</option>
-                            <option value="most-bids">Most Bids</option>
+                            <option value="ELECTRONICS">Electronics</option>
+                            <option value="ART">Art</option>
+                            <option value="VEHICLE">Vehicle</option>
+                            <option value="BOOK">Book</option>
+                            <option value="FASHION">Fashion</option>
+                            <option value="COLLECTIBLE">Collectible</option>
+                            <option value="PROPERTY">Property</option>
                         </select>
                     </div>
                 </div>
@@ -249,57 +239,24 @@
             </div>
         </section>
 
-        <section id="myAuctionsView" class="view hidden">
+        <section id="categoriesView" class="view hidden">
             <div class="container">
                 <div class="view-header">
                     <div>
-                        <h1>My Auctions</h1>
-                        <p class="subtle">Manage the auctions you created</p>
-                    </div>
-                    <button class="btn-primary" data-view="create" type="button">+ New Auction</button>
-                </div>
-                <div class="stats-grid compact-stats">
-                    <div class="stat-card">
-                        <p class="eyebrow">Active Auctions</p>
-                        <h2 id="myAuctionActiveStat">0</h2>
-                    </div>
-                    <div class="stat-card">
-                        <p class="eyebrow">Total Bids Received</p>
-                        <h2 id="myAuctionBidStat">0</h2>
-                    </div>
-                    <div class="stat-card">
-                        <p class="eyebrow">Live Portfolio Value</p>
-                        <h2 id="myAuctionValueStat">$0.00</h2>
+                        <h1>Categories</h1>
+                        <p class="subtle">Browse auctions by category</p>
                     </div>
                 </div>
-                <div class="table-wrap">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Item</th>
-                                <th>Start Price</th>
-                                <th>Current Bid</th>
-                                <th>Bids</th>
-                                <th>Bidders</th>
-                                <th>Leader</th>
-                                <th>Status</th>
-                                <th>Ends</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="myAuctionsTable"></tbody>
-                    </table>
-                </div>
+                <div id="categoriesGrid" class="categories-grid"></div>
             </div>
         </section>
 
-        <section id="myBidsView" class="view hidden">
+        <section id="my-bidsView" class="view hidden">
             <div class="container">
                 <div class="view-header">
-                    <button class="back-link" data-view="dashboard" type="button">Back</button>
                     <div>
                         <h1>My Bids</h1>
-                        <p class="subtle">Auctions you've participated in</p>
+                        <p class="subtle">Tracking your competition</p>
                     </div>
                 </div>
                 <div class="tab-bar">
@@ -312,100 +269,246 @@
             </div>
         </section>
 
+        <section id="my-auctionsView" class="view hidden">
+            <div class="container">
+                <div class="view-header">
+                    <div>
+                        <h1>My Auctions</h1>
+                        <p class="subtle">Manage your listings</p>
+                    </div>
+                    <button class="btn-primary" data-view="create" type="button">+ New Auction</button>
+                </div>
+                <div class="tab-bar">
+                    <button class="tab active" data-my-filter="all" type="button">All</button>
+                    <button class="tab" data-my-filter="active" type="button">Active</button>
+                    <button class="tab" data-my-filter="ended" type="button">Ended</button>
+                </div>
+                <p class="subtle" id="myAuctionsCount">Your auctions (0)</p>
+                <div id="myAuctionsGrid" class="auction-grid"></div>
+            </div>
+        </section>
+
+        <section id="watchlistView" class="view hidden">
+            <div class="container">
+                <div class="view-header">
+                    <div>
+                        <h1>My Watchlist</h1>
+                        <p class="subtle">Auctions you're watching</p>
+                    </div>
+                </div>
+                <div id="watchlistGrid" class="auction-grid"></div>
+                <p class="subtle" id="watchlistEmpty" style="text-align:center; padding:3rem 0;">Your watchlist is empty. Browse auctions and click the watch icon to add items.</p>
+            </div>
+        </section>
+
+        <section id="invoicesView" class="view hidden">
+            <div class="container">
+                <div class="view-header">
+                    <div>
+                        <h1>Invoices</h1>
+                        <p class="subtle">Your payment history and invoices</p>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Invoice ID</th>
+                                <th>Auction</th>
+                                <th>Item</th>
+                                <th>Amount</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="invoicesTableBody">
+                        </tbody>
+                    </table>
+                </div>
+                <p class="subtle" id="invoicesEmpty" style="text-align:center; padding:3rem 0;">No invoices yet.</p>
+            </div>
+        </section>
+
+        <section id="historyView" class="view hidden">
+            <div class="container">
+                <div class="view-header">
+                    <div>
+                        <h1>Account History</h1>
+                        <p class="subtle">Your complete auction and bid activity</p>
+                    </div>
+                </div>
+                <div class="tab-bar">
+                    <button class="tab active" data-history-filter="all" type="button">All Activity</button>
+                    <button class="tab" data-history-filter="bids" type="button">My Bids</button>
+                    <button class="tab" data-history-filter="won" type="button">Won Auctions</button>
+                    <button class="tab" data-history-filter="sold" type="button">Sold Items</button>
+                </div>
+                <div id="historyGrid" class="auction-grid"></div>
+                <p class="subtle" id="historyEmpty" style="text-align:center; padding:3rem 0;">No activity yet.</p>
+            </div>
+        </section>
+
+        <section id="paymentResultView" class="view hidden">
+            <div class="container">
+                <div class="auth-container">
+                    <div class="auth-card" style="text-align:center;">
+                        <div id="paymentResultIcon" style="font-size:4rem; margin-bottom:1rem;"></div>
+                        <h2 id="paymentResultTitle">Payment Processing</h2>
+                        <p class="subtle" id="paymentResultMsg">Your payment is being processed. You will be notified once it's confirmed.</p>
+                        <button class="btn-primary" data-view="dashboard" type="button" style="margin-top:1.5rem;">Back to Dashboard</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section id="accountView" class="view hidden">
             <div class="container-small">
                 <div class="view-header">
-                    <div>
-                        <h1>Account</h1>
-                        <p class="subtle">Manage your profile and security settings</p>
-                    </div>
+                    <h1>Account Settings</h1>
                 </div>
 
-                <div class="stats-grid compact-stats">
-                    <div class="stat-card">
-                        <p class="eyebrow">Username</p>
-                        <h2 id="accountUsername">-</h2>
-                    </div>
-                    <div class="stat-card">
-                        <p class="eyebrow">Role</p>
-                        <h2 id="accountRole">-</h2>
-                    </div>
-                    <div class="stat-card">
-                        <p class="eyebrow">Member Since</p>
-                        <h2 id="accountCreatedAt">-</h2>
-                    </div>
-                    <div class="stat-card">
-                        <p class="eyebrow">Auction Limit</p>
-                        <h2 id="accountAuctionLimit">0</h2>
-                    </div>
-                </div>
-
-                <div class="stats-grid compact-stats">
-                    <div class="stat-card">
-                        <p class="eyebrow">Your Listings</p>
-                        <h2 id="accountListingCount">0</h2>
-                    </div>
-                    <div class="stat-card">
-                        <p class="eyebrow">Your Bids</p>
-                        <h2 id="accountBidCount">0</h2>
-                    </div>
-                </div>
-
-                <form id="profileForm" class="detail-section">
+                <div class="detail-section" style="margin-bottom: 2rem;">
                     <h3>Profile</h3>
-                    <div class="form-group">
-                        <label>Username</label>
-                        <input type="text" name="username" id="profileUsernameInput" required>
+                    <p class="subtle">View your account activity</p>
+                    <div style="margin-top:1rem;">
+                        <button class="btn-secondary" data-view="history" type="button">View Account History</button>
                     </div>
-                    <div class="form-actions">
-                        <button type="submit" class="btn-primary">Update Username</button>
-                    </div>
-                </form>
+                </div>
 
-                <form id="passwordForm" class="detail-section">
-                    <h3>Change Password</h3>
-                    <div class="form-group">
-                        <label>Current Password</label>
-                        <input type="password" name="currentPassword" required>
+                <div class="detail-section" style="margin-bottom: 2rem;">
+                    <h3>Two-Factor Authentication</h3>
+                    <p class="subtle" id="twoFaStatus">2FA is not enabled</p>
+                    <div style="margin-top:1rem;">
+                        <button class="btn-secondary" id="enable2faBtn" type="button">Enable 2FA</button>
+                        <button class="btn-secondary hidden" id="disable2faBtn" type="button" style="color: var(--danger); border-color: var(--danger);">Disable 2FA</button>
                     </div>
-                    <div class="form-group">
-                        <label>New Password</label>
-                        <input type="password" name="newPassword" minlength="6" required>
+                    <div id="twoFaSetup" class="hidden" style="margin-top:1rem;">
+                        <p class="subtle">Scan this QR code with your authenticator app:</p>
+                        <div id="twoFaQrCode" style="margin:1rem 0;"></div>
+                        <div class="form-group">
+                            <label>Enter 6-digit code</label>
+                            <input type="text" id="twoFaCodeInput" placeholder="123456" maxlength="6">
+                        </div>
+                        <button class="btn-primary" id="confirm2faBtn" type="button">Confirm</button>
                     </div>
-                    <div class="form-actions">
+                </div>
+
+                <div class="detail-section" style="margin-bottom: 2rem;">
+                    <h3>Security</h3>
+                    <p class="subtle">Update your password to keep your account secure</p>
+                    <form id="passwordForm">
+                        <div class="form-group">
+                            <label>Current Password</label>
+                            <input type="password" name="currentPassword" required>
+                        </div>
+                        <div class="form-group">
+                            <label>New Password</label>
+                            <input type="password" name="newPassword" required>
+                        </div>
                         <button type="submit" class="btn-primary">Update Password</button>
-                    </div>
-                </form>
+                    </form>
+                </div>
 
-                <form id="deleteAccountForm" class="detail-section">
-                    <h3>Delete Account</h3>
-                    <p class="subtle">This only works if the account has no auctions and no bidding history.</p>
-                    <div class="form-group">
-                        <label>Confirm Password</label>
-                        <input type="password" name="password" required>
+                <div class="detail-section">
+                    <h3 style="color: var(--danger);">Danger Zone</h3>
+                    <p class="subtle">Once you delete your account, there is no going back.</p>
+                    <button class="btn-secondary" style="color: var(--danger); border-color: var(--danger); margin-top: 1rem;" id="deleteAccountBtn">Delete Account</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="notificationsView" class="view hidden">
+            <div class="container">
+                <div class="view-header">
+                    <div>
+                        <h1>Notifications</h1>
+                        <p class="subtle">Your recent activity and alerts</p>
                     </div>
-                    <div class="form-actions">
-                        <button type="submit" class="btn-secondary">Delete Account</button>
+                    <button class="btn-secondary" id="markAllReadBtn" type="button">Mark All Read</button>
+                </div>
+                <div id="notificationsList" class="notifications-list"></div>
+                <p class="subtle" id="notificationsEmpty" style="text-align:center; padding:3rem 0;">No notifications yet.</p>
+            </div>
+        </section>
+
+        <section id="adminRefundsView" class="view hidden">
+            <div class="container">
+                <div class="view-header">
+                    <div>
+                        <h1>Refund Requests</h1>
+                        <p class="subtle">Review and process user refund requests</p>
                     </div>
-                </form>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Refund ID</th>
+                                <th>Auction</th>
+                                <th>User</th>
+                                <th>Amount</th>
+                                <th>Reason</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="refundsTableBody">
+                        </tbody>
+                    </table>
+                </div>
+                <p class="subtle" id="refundsEmpty" style="text-align:center; padding:3rem 0;">No refund requests yet.</p>
+            </div>
+        </section>
+
+        <section id="adminRefundsView" class="view hidden">
+            <div class="container">
+                <div class="view-header">
+                    <div>
+                        <h1>Refund Requests</h1>
+                        <p class="subtle">Review and process user refund requests</p>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Refund ID</th>
+                                <th>Auction</th>
+                                <th>User</th>
+                                <th>Amount</th>
+                                <th>Reason</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="refundsTableBody">
+                        </tbody>
+                    </table>
+                </div>
+                <p class="subtle" id="refundsEmpty" style="text-align:center; padding:3rem 0;">No refund requests yet.</p>
             </div>
         </section>
 
         <section id="createView" class="view hidden">
             <div class="container-small">
+                <button class="back-link" data-view="dashboard">← Back to Dashboard</button>
                 <div class="view-header">
-                    <div>
-                        <h1 id="createTitle">Create Auction</h1>
-                        <p class="subtle" id="createSubtitle">List your item for the world to see</p>
-                    </div>
+                    <h1 id="auctionFormTitle">Create New Auction</h1>
                 </div>
-                <p class="subtle" id="sellerLimitNotice">Seller auction limit applies to this account.</p>
+
                 <form id="auctionForm" class="detail-section">
-                    <input type="hidden" name="auctionId">
+                    <div class="form-group">
+                        <label>Item Name</label>
+                        <input type="text" name="name" placeholder="e.g. Vintage Camera" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea name="description" rows="4" placeholder="Describe your item..." required></textarea>
+                    </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label>Item Type</label>
-                            <select name="itemType" id="itemTypeSelect">
+                            <label>Category</label>
+                            <select name="itemType">
                                 <option value="ELECTRONICS">Electronics</option>
                                 <option value="ART">Art</option>
                                 <option value="VEHICLE">Vehicle</option>
@@ -416,49 +519,52 @@
                             </select>
                         </div>
                         <div class="form-group">
-                            <label>Item Name</label>
-                            <input type="text" name="name" placeholder="e.g. Mac mini M4" required>
+                            <label>Starting Price</label>
+                            <input type="number" name="startingPrice" step="0.01" value="0.00" required>
                         </div>
-                    </div>
-                    <div class="form-group">
-                        <label>Description</label>
-                        <textarea name="description" rows="4" placeholder="Describe your item in detail..." required></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>Image URL</label>
-                        <input type="url" name="imageUrl" placeholder="https://example.com/item.jpg">
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label>Starting Price</label>
-                            <input type="number" name="startingPrice" min="1" step="0.01" value="100" required>
+                            <label>Duration (Minutes)</label>
+                            <input type="number" name="durationMinutes" value="60" required>
                         </div>
                         <div class="form-group">
                             <label>Currency</label>
-                            <select name="currency" id="currencySelect">
-                                <option value="USD">USD</option>
-                                <option value="EUR">EUR</option>
-                                <option value="GBP">GBP</option>
-                                <option value="VND">VND</option>
-                                <option value="INR">INR</option>
+                            <select name="currency">
+                                <option value="VND">VND (₫)</option>
+                                <option value="USD">USD ($)</option>
+                                <option value="EUR">EUR (€)</option>
+                                <option value="GBP">GBP (£)</option>
+                                <option value="JPY">JPY (¥)</option>
                             </select>
-                        </div>
-                        <div class="form-group">
-                            <label id="extraFieldLabel">Brand</label>
-                            <input type="text" name="extraInfo" placeholder="Extra details">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label>Auction Image</label>
+                        <label>Item Image</label>
                         <input type="file" id="imageInput" accept="image/*">
                     </div>
                     <div class="form-group">
-                        <label>Duration (minutes)</label>
-                        <input type="number" name="durationMinutes" min="1" value="60" required>
+                        <label>Extra Info</label>
+                        <input type="text" name="extraInfo" placeholder="e.g. Brand, Model, Condition">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Buy-It-Now Price (₫)</label>
+                            <input type="number" name="buyItNowPrice" step="0.01" value="0" placeholder="0 = disabled">
+                        </div>
+                        <div class="form-group">
+                            <label>Reserve Price (₫)</label>
+                            <input type="number" name="reservePrice" step="0.01" value="0" placeholder="0 = no reserve">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Schedule Start Time (optional)</label>
+                        <input type="datetime-local" name="scheduledStartTime" id="scheduledStartTimeInput">
+                        <p class="subtle" style="font-size:0.75rem; margin-top:0.25rem;">Leave blank to start immediately</p>
                     </div>
                     <div class="form-actions">
-                        <button type="submit" class="btn-primary" id="createSubmit">Create Auction</button>
-                        <button type="button" class="btn-secondary hidden" id="cancelEdit">Cancel</button>
+                        <button type="submit" class="btn-primary" id="submitAuctionBtn">Create Auction</button>
+                        <button type="button" class="btn-secondary" data-view="dashboard">Cancel</button>
                     </div>
                 </form>
             </div>
@@ -466,41 +572,43 @@
 
         <section id="detailView" class="view hidden">
             <div class="container">
-                <button class="back-link" id="detailBack" type="button">Back</button>
+                <button class="back-link" id="detailBack">← Back to Auctions</button>
+                
                 <div class="detail-layout">
-                    <div class="detail-left">
-                        <div class="image-placeholder-large" id="detailImage">
-                            <div class="state-overlay" id="detailStateOverlay">Live Auction</div>
+                    <div class="detail-main">
+                        <div class="image-placeholder-large" id="detailImage"></div>
+                        <div class="detail-info">
+                            <span class="category-badge" id="detailCategory">Category</span>
+                            <h1 id="detailTitle">Item Name</h1>
+                            <p class="subtle" id="detailDesc">Description</p>
                         </div>
-
+                        
                         <div class="detail-section">
-                            <div id="priceChart" class="price-chart"></div>
                             <h3>Bid History</h3>
-                            <p class="subtle" id="chartSummary">Latest competitive bids</p>
-                            <div id="bidHistoryList" class="history-list"></div>
+                            <div class="history-list" id="bidHistoryList">
+                            </div>
                         </div>
                     </div>
 
-                    <div class="detail-right">
-                        <div class="detail-info">
-                            <span class="category-badge" id="detailCategory">Electronics</span>
-                            <h1 id="detailTitle">Mac mini M4</h1>
-                            <p class="subtle" id="detailDesc">Auction description</p>
-                        </div>
-
+                    <div class="detail-sidebar">
                         <div class="bid-box">
                             <div class="bid-box-header">
                                 <div>
-                                    <p class="eyebrow">CURRENT BID</p>
+                                    <p class="subtle eyebrow">CURRENT PRICE</p>
                                     <h2 id="detailPrice">Rs 0</h2>
                                     <p class="subtle" id="detailStartPrice">Started at Rs 0</p>
                                 </div>
-                                <div class="bid-count-badge"><span id="detailBidCount">0</span> bids</div>
+                                <div class="bid-count-badge">
+                                    <span id="detailBidCount">0</span> bids
+                                </div>
                             </div>
+                            
+                            <button id="editAuctionBtn" class="btn-secondary btn-full hidden" style="margin-bottom: 1rem;" onclick="openEdit()">Edit Auction</button>
+                            <button id="watchBtn" class="btn-secondary btn-full hidden" style="margin-bottom: 1rem;" type="button">Watch</button>
 
                             <div class="timer-section" id="timerSection">
-                                <div class="timer-label">Time remaining</div>
-                                <div class="countdown" id="countdown">
+                                <div class="timer-label">TIME REMAINING</div>
+                                <div class="countdown">
                                     <div class="time-unit"><span id="days">00</span>d</div>
                                     <div class="time-unit"><span id="hours">00</span>h</div>
                                     <div class="time-unit"><span id="mins">00</span>m</div>
@@ -508,51 +616,82 @@
                                 </div>
                             </div>
 
-                            <div class="winner-section hidden" id="winnerSection">
+                            <div id="endedMsg" class="auction-ended-msg hidden">
+                                This auction has ended
+                            </div>
+
+                            <div id="winnerSection" class="winner-section hidden">
                                 <div class="winner-card">
-                                    <div class="winner-icon">W</div>
+                                    <div class="winner-icon">🏆</div>
                                     <div>
-                                        <p class="eyebrow">WINNER</p>
-                                        <h3 id="winnerName">Bidder</h3>
-                                        <p class="subtle">Won with a bid of <span id="winnerBid">Rs 0</span></p>
+                                        <p class="subtle eyebrow">WINNER</p>
+                                        <h3 id="winnerName">-</h3>
+                                        <p class="subtle">Final bid: <span class="highlight" id="winnerBid">Rs 0</span></p>
                                     </div>
                                 </div>
+                            </div>
+
+                            <div id="buyNowSection" class="hidden" style="margin-top:1rem;">
+                                <button id="buyNowBtn" class="btn-primary btn-full" type="button" style="background: var(--success); box-shadow: 0 10px 24px rgb(36 199 138 / 0.28);">Buy It Now — <span id="buyNowPriceLabel"></span></button>
+                            </div>
+
+                            <div id="buyNowSection" class="hidden" style="margin-top:1rem;">
+                                <button id="buyNowBtn" class="btn-primary btn-full" type="button" style="background: var(--success); box-shadow: 0 10px 24px rgb(36 199 138 / 0.28);">Buy It Now — <span id="buyNowPriceLabel"></span></button>
+                            </div>
+
+                            <div id="paymentSection" class="hidden" style="margin-top:1rem;">
+                                <p class="subtle eyebrow">PAYMENT</p>
+                                <p class="subtle" id="paymentStatusText" style="margin-bottom:0.5rem;"></p>
+                                <button id="payNowBtn" class="btn-primary btn-full hidden" type="button">Pay with ZaloPay</button>
+                                <button id="markReceivedBtn" class="btn-secondary btn-full hidden" type="button">Mark as Received</button>
+                            </div>
+
+                            <div id="refundSection" class="hidden" style="margin-top:1rem;">
+                                <p class="subtle eyebrow">REFUND</p>
+                                <p class="subtle" id="refundStatusText" style="margin-bottom:0.5rem;"></p>
+                                <button id="requestRefundBtn" class="btn-secondary btn-full hidden" type="button" style="color: var(--warning); border-color: var(--warning);">Request Refund</button>
+                            </div>
+
+                            <div id="refundSection" class="hidden" style="margin-top:1rem;">
+                                <p class="subtle eyebrow">REFUND</p>
+                                <p class="subtle" id="refundStatusText" style="margin-bottom:0.5rem;"></p>
+                                <button id="requestRefundBtn" class="btn-secondary btn-full hidden" type="button" style="color: var(--warning); border-color: var(--warning);">Request Refund</button>
                             </div>
 
                             <div class="bid-actions" id="bidActions">
-                                <div class="form-group">
-                                    <label>Place your bid</label>
-                                    <div class="input-with-button">
-                                        <input type="number" id="bidInput" placeholder="Enter amount">
-                                        <button class="btn-primary" id="placeBidBtn" type="button">Place Bid</button>
-                                    </div>
+                                <div class="input-with-button">
+                                    <input type="number" id="bidInput" placeholder="Bid amount">
+                                    <button class="btn-primary" id="placeBidBtn">Place Bid</button>
                                 </div>
-                                <div class="form-group">
-                                    <label>Auto-bid</label>
-                                    <div class="input-with-button">
-                                        <input type="number" id="autoMaxInput" placeholder="Max bid">
-                                        <input type="number" id="autoIncInput" placeholder="Increment">
-                                        <button class="btn-secondary" id="autoBidBtn" type="button">Auto</button>
-                                    </div>
+                                <p class="subtle" style="font-size: 0.75rem; text-align: center;">Enter at least current bid + increment</p>
+                                
+                                <hr style="margin: 1rem 0; border: 0; border-top: 1px solid var(--border);">
+                                
+                                <div class="form-group" style="margin-bottom: 0.5rem;">
+                                    <label>Auto-bid Maximum</label>
+                                    <input type="number" id="autoMaxInput" placeholder="Max amount">
+                                </div>
+                                <div class="input-with-button">
+                                    <input type="number" id="autoIncInput" placeholder="Increment" value="10">
+                                    <button class="btn-secondary" id="autoBidBtn">Auto-bid</button>
                                 </div>
                             </div>
-
-                            <div class="auction-ended-msg hidden" id="endedMsg">Auction ended</div>
-                        </div>
-
-                        <div class="watching-card">
-                            <p class="eyebrow">WATCHING ACTIVITY</p>
-                            <div class="watcher-list" id="watcherList"></div>
                         </div>
 
                         <div class="seller-card">
-                            <p class="eyebrow">SELLER</p>
+                            <p class="subtle eyebrow">SELLER</p>
                             <div class="seller-info">
-                                <div class="avatar" id="sellerAvatar">A</div>
+                                <div class="avatar" id="sellerAvatar">S</div>
                                 <div>
-                                    <h4 id="sellerName">Seller</h4>
-                                    <p class="subtle">Auction creator</p>
+                                    <h4 id="sellerName">Seller Name</h4>
+                                    <p class="subtle">Verified Member</p>
                                 </div>
+                            </div>
+                        </div>
+
+                        <div class="watching-card">
+                            <p class="subtle eyebrow">WATCHING NOW</p>
+                            <div class="watcher-list" id="watcherList">
                             </div>
                         </div>
                     </div>

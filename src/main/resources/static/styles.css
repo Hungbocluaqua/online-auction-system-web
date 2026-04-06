@@ -964,6 +964,240 @@ input:focus, select:focus, textarea:focus {
 .toast.success { border-left-color: var(--success); }
 .toast.info { border-left-color: var(--primary); }
 
+.watch-icon-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: rgba(255, 255, 255, 0.9);
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    z-index: 2;
+}
+.watch-icon-btn:hover {
+    background: white;
+    transform: scale(1.1);
+}
+.watch-icon-btn.watching {
+    color: var(--warning);
+}
+
+.category-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 2rem 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: var(--shadow-sm);
+}
+.category-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow);
+    border-color: var(--primary);
+}
+.categories-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.notifications-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.notification-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    transition: all 0.2s;
+}
+.notification-item.unread {
+    border-left: 4px solid var(--primary);
+    background: var(--primary-light);
+}
+.notification-item.read {
+    opacity: 0.7;
+}
+.notif-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+.notif-content {
+    flex: 1;
+}
+.notif-content p {
+    margin: 0 0 0.25rem;
+    font-size: 0.9375rem;
+}
+.mark-read-btn {
+    flex-shrink: 0;
+}
+
+.notif-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--danger);
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+}
+
+.status-pill.PENDING {
+    background: #fff7ed;
+    color: #9a3412;
+}
+.status-pill.approved {
+    background: #dcfce7;
+    color: #166534;
+}
+.status-pill.rejected {
+    background: #fee2e2;
+    color: #991b1b;
+}
+.status-pill.refunded {
+    background: #ede9fe;
+    color: #5b21b6;
+}
+
+.watch-icon-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: rgba(255, 255, 255, 0.9);
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    z-index: 2;
+}
+.watch-icon-btn:hover {
+    background: white;
+    transform: scale(1.1);
+}
+.watch-icon-btn.watching {
+    color: var(--warning);
+}
+
+.category-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 2rem 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: var(--shadow-sm);
+}
+.category-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow);
+    border-color: var(--primary);
+}
+.categories-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.notifications-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.notification-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    transition: all 0.2s;
+}
+.notification-item.unread {
+    border-left: 4px solid var(--primary);
+    background: var(--primary-light);
+}
+.notification-item.read {
+    opacity: 0.7;
+}
+.notif-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+.notif-content {
+    flex: 1;
+}
+.notif-content p {
+    margin: 0 0 0.25rem;
+    font-size: 0.9375rem;
+}
+.mark-read-btn {
+    flex-shrink: 0;
+}
+
+.notif-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--danger);
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+}
+
+.status-pill.PENDING {
+    background: #fff7ed;
+    color: #9a3412;
+}
+.status-pill.approved {
+    background: #dcfce7;
+    color: #166534;
+}
+.status-pill.rejected {
+    background: #fee2e2;
+    color: #991b1b;
+}
+.status-pill.refunded {
+    background: #ede9fe;
+    color: #5b21b6;
+}
+
 @media (max-width: 1024px) {
     .detail-layout {
         grid-template-columns: 1fr;

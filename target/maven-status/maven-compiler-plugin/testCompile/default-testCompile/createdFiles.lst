@@ -1,0 +1,3 @@
+com\auction\web\service\AuctionServiceIntegrationTest.class
+com\auction\web\service\AuctionServiceTest.class
+com\auction\web\service\SecurityFeaturesTest.class

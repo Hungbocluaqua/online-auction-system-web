@@ -10,7 +10,7 @@ public class Vehicle extends Item {
 
     @Override
     public String getType() {
-        return "Vehicle";
+        return "VEHICLE";
     }
 
     @Override

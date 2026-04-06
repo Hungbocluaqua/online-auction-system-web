@@ -1,0 +1,132 @@
+{
+  "users": [
+    {
+      "id": "77a7ddd0-a8fd-4a53-aedb-330d9427e74a",
+      "username": "admin",
+      "role": "ADMIN",
+      "auction_limit": 2147483647,
+      "created_at": 1775454382266,
+      "email_verified": false
+    },
+    {
+      "id": "8f617e43-5950-4cef-8358-3351f2578614",
+      "username": "seller1",
+      "role": "USER",
+      "auction_limit": 3,
+      "created_at": 1775454382496,
+      "email_verified": false
+    },
+    {
+      "id": "64c5ac0f-bf6c-46f0-aa9e-cd3245e0934c",
+      "username": "bidder1",
+      "role": "USER",
+      "auction_limit": 3,
+      "created_at": 1775454383184,
+      "email_verified": false
+    },
+    {
+      "id": "4837204c-e974-4cef-aa88-35e72a90c78a",
+      "username": "e2eseller",
+      "role": "USER",
+      "auction_limit": 3,
+      "created_at": 1775454386400,
+      "email_verified": false
+    },
+    {
+      "id": "b833a2c5-0a61-4bb0-986e-dd986d6e22bf",
+      "username": "wlseller",
+      "role": "USER",
+      "auction_limit": 3,
+      "created_at": 1775454387341,
+      "email_verified": false
+    },
+    {
+      "id": "1e314963-ca92-4f72-b93e-169c0492ec03",
+      "username": "wluser",
+      "role": "USER",
+      "auction_limit": 3,
+      "created_at": 1775454388032,
+      "email_verified": false
+    },
+    {
+      "id": "9171be82-5ae6-421b-9448-6282a24f3d33",
+      "username": "pagseller",
+      "role": "USER",
+      "auction_limit": 3,
+      "created_at": 1775454388951,
+      "email_verified": false
+    },
+    {
+      "id": "37c3d2b5-3241-48aa-80b7-a8f22766b644",
+      "username": "catseller",
+      "role": "USER",
+      "auction_limit": 3,
+      "created_at": 1775454389865,
+      "email_verified": false
+    },
+    {
+      "id": "990407a9-3c32-42de-ab49-d14a41a56c31",
+      "username": "histseller",
+      "role": "USER",
+      "auction_limit": 3,
+      "created_at": 1775454390779,
+      "email_verified": false
+    },
+    {
+      "id": "da5b0ca2-545d-44bc-bf1e-619f426d17af",
+      "username": "histbidder",
+      "role": "USER",
+      "auction_limit": 3,
+      "created_at": 1775454391471,
+      "email_verified": false
+    },
+    {
+      "id": "db0201d8-6d86-401e-b23f-20952c58efd8",
+      "username": "e2eadmin",
+      "role": "ADMIN",
+      "auction_limit": 100,
+      "created_at": 1775454392388,
+      "email_verified": false
+    },
+    {
+      "id": "f58490ba-dbf5-4532-a9d4-ac38acee10d4",
+      "username": "discseller",
+      "role": "USER",
+      "auction_limit": 3,
+      "created_at": 1775454393084,
+      "email_verified": false
+    },
+    {
+      "id": "a48c4f92-61a1-42d7-9d92-706fda50fe51",
+      "username": "discbuyer",
+      "role": "USER",
+      "auction_limit": 3,
+      "created_at": 1775454393787,
+      "email_verified": false
+    },
+    {
+      "id": "ff5353f0-6c99-4942-b6c6-e2f541481360",
+      "username": "resetuser",
+      "role": "USER",
+      "auction_limit": 3,
+      "created_at": 1775454394726,
+      "email_verified": false
+    },
+    {
+      "id": "9cf0837b-e152-4d2f-b9ab-05b2eb2ae1e0",
+      "username": "e2eadmin2",
+      "role": "ADMIN",
+      "auction_limit": 100,
+      "created_at": 1775454396579,
+      "email_verified": false
+    },
+    {
+      "id": "b1b21ff2-f541-46f0-a312-d3b037ce1c7d",
+      "username": "limituser",
+      "role": "USER",
+      "auction_limit": 10,
+      "created_at": 1775454400922,
+      "email_verified": false
+    }
+  ]
+}

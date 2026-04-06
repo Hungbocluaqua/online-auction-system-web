@@ -12,13 +12,31 @@ import java.nio.file.Files;
 public class StaticFileHandler implements HttpHandler {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
+        addSecurityHeaders(exchange);
         String path = exchange.getRequestURI().getPath();
         
         // Serve from uploads directory
         if (path.startsWith("/uploads/")) {
             String filename = path.substring("/uploads/".length());
-            File file = new File("uploads", filename);
-            if (file.exists() && file.isFile()) {
+            if (filename.contains("..") || filename.contains("/") || filename.contains("\\")) {
+                byte[] body = "Forbidden".getBytes(StandardCharsets.UTF_8);
+                HttpUtil.writeBytes(exchange, 403, "text/plain; charset=UTF-8", body);
+                return;
+            }
+            File uploadsDir = new File("uploads").getCanonicalFile();
+            File file = new File(uploadsDir, filename);
+            if (!file.exists()) {
+                byte[] body = "Not found".getBytes(StandardCharsets.UTF_8);
+                HttpUtil.writeBytes(exchange, 404, "text/plain; charset=UTF-8", body);
+                return;
+            }
+            String canonicalPath = file.getCanonicalPath();
+            if (!canonicalPath.startsWith(uploadsDir.getPath() + File.separator)) {
+                byte[] body = "Forbidden".getBytes(StandardCharsets.UTF_8);
+                HttpUtil.writeBytes(exchange, 403, "text/plain; charset=UTF-8", body);
+                return;
+            }
+            if (file.isFile()) {
                 byte[] body = Files.readAllBytes(file.toPath());
                 HttpUtil.writeBytes(exchange, 200, contentType(path), body);
                 return;
@@ -38,8 +56,17 @@ public class StaticFileHandler implements HttpHandler {
                 return;
             }
             byte[] body = stream.readAllBytes();
+            exchange.getResponseHeaders().set("Cache-Control", "no-cache, no-store, must-revalidate");
             HttpUtil.writeBytes(exchange, 200, contentType(path), body);
         }
+    }
+
+    private void addSecurityHeaders(HttpExchange exchange) {
+        exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+        exchange.getResponseHeaders().set("X-Frame-Options", "DENY");
+        exchange.getResponseHeaders().set("X-XSS-Protection", "1; mode=block");
+        exchange.getResponseHeaders().set("Referrer-Policy", "strict-origin-when-cross-origin");
+        exchange.getResponseHeaders().set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
     }
 
     private String contentType(String path) {

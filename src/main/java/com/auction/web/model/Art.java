@@ -10,7 +10,7 @@ public class Art extends Item {
 
     @Override
     public String getType() {
-        return "Art";
+        return "ART";
     }
 
     @Override

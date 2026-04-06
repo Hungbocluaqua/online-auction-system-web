@@ -8,7 +8,6 @@ public class Auction extends Entity {
         OPEN,
         RUNNING,
         FINISHED,
-        PAID,
         CANCELED
     }
 
@@ -22,6 +21,8 @@ public class Auction extends Entity {
     private String highestBidderUsername;
     private String imageFilename;
     private String currency;
+    private double buyItNowPrice;
+    private double reservePrice;
     private State state;
     private List<BidTransaction> bidHistory;
     private List<AutoBidConfig> autoBids;
@@ -36,6 +37,8 @@ public class Auction extends Entity {
         this.currentPrice = item.getStartingPrice();
         this.imageFilename = "";
         this.currency = "USD";
+        this.buyItNowPrice = 0;
+        this.reservePrice = 0;
         this.state = State.OPEN;
         this.bidHistory = new ArrayList<>();
         this.autoBids = new ArrayList<>();
@@ -119,17 +122,17 @@ public class Auction extends Entity {
         if (state != State.RUNNING) {
             return false;
         }
-        if (bidder.getId().equals(ownerId)) {
-            return false; // Seller cannot bid on own auction
-        }
-        if (bidder.getId().equals(highestBidderId)) {
-            return false; // Cannot bid against self
-        }
-        if (amount <= currentPrice) {
-            return false;
-        }
         if (System.currentTimeMillis() > endTime) {
             state = State.FINISHED;
+            return false;
+        }
+        if (bidder.getId().equals(ownerId)) {
+            return false;
+        }
+        if (bidder.getId().equals(highestBidderId)) {
+            return false;
+        }
+        if (amount <= currentPrice) {
             return false;
         }
 
@@ -164,6 +167,23 @@ public class Auction extends Entity {
         this.currency = currency == null || currency.isBlank() ? "USD" : currency.trim().toUpperCase();
     }
 
+    public double getBuyItNowPrice() { return buyItNowPrice; }
+    public void setBuyItNowPrice(double buyItNowPrice) { this.buyItNowPrice = buyItNowPrice; }
+    public double getReservePrice() { return reservePrice; }
+    public void setReservePrice(double reservePrice) { this.reservePrice = reservePrice; }
+    public boolean hasBuyItNow() { return buyItNowPrice > 0; }
+    public boolean hasReserve() { return reservePrice > 0; }
+    public boolean reserveMet() { return !hasReserve() || currentPrice >= reservePrice; }
+
+    public void setCurrentPrice(double currentPrice) {
+        this.currentPrice = currentPrice;
+    }
+
+    public void setHighestBidder(String highestBidderId, String highestBidderUsername) {
+        this.highestBidderId = highestBidderId;
+        this.highestBidderUsername = highestBidderUsername;
+    }
+
     public void restoreState(
         String imageFilename,
         String currency,
@@ -190,14 +210,13 @@ public class Auction extends Entity {
 
     public void updateItem(Item item) {
         this.item = item;
-        this.currentPrice = item.getStartingPrice();
     }
 
     public void syncUsername(String userId, String username) {
-        if (ownerId.equals(userId)) {
+        if (ownerId != null && ownerId.equals(userId)) {
             ownerUsername = username;
         }
-        if (userId.equals(highestBidderId)) {
+        if (highestBidderId != null && userId.equals(highestBidderId)) {
             highestBidderUsername = username;
         }
         for (BidTransaction bid : bidHistory) {
@@ -213,7 +232,8 @@ public class Auction extends Entity {
     }
 
     public boolean involvesUser(String userId) {
-        if (ownerId.equals(userId) || userId.equals(highestBidderId)) {
+        if (userId == null) return false;
+        if ((ownerId != null && ownerId.equals(userId)) || (highestBidderId != null && highestBidderId.equals(userId))) {
             return true;
         }
         return bidHistory.stream().anyMatch(bid -> userId.equals(bid.getBidderId()))

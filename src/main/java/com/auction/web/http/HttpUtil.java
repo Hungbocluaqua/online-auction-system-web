@@ -19,6 +19,10 @@ public final class HttpUtil {
         return new String(readBodyBytes(exchange), StandardCharsets.UTF_8);
     }
 
+    public static <T> T readBody(HttpExchange exchange, Gson gson, Class<T> clazz) throws IOException {
+        return gson.fromJson(readBody(exchange), clazz);
+    }
+
     public static byte[] readBodyBytes(HttpExchange exchange) throws IOException {
         try (InputStream is = exchange.getRequestBody()) {
             return is.readAllBytes();
@@ -28,9 +32,6 @@ public final class HttpUtil {
     public static void writeJson(HttpExchange exchange, int statusCode, Gson gson, ApiResponse response) throws IOException {
         byte[] body = gson.toJson(response).getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
-        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
-        exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type, Authorization");
-        exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
         exchange.sendResponseHeaders(statusCode, body.length);
         try (OutputStream outputStream = exchange.getResponseBody()) {
             outputStream.write(body);
@@ -82,9 +83,13 @@ public final class HttpUtil {
     }
 
     public static String clientIp(HttpExchange exchange) {
-        List<String> forwarded = exchange.getRequestHeaders().get("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isEmpty()) {
-            return forwarded.get(0).split(",")[0].trim();
+        String forwardedFor = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            return forwardedFor.split(",")[0].trim();
+        }
+        String realIp = exchange.getRequestHeaders().getFirst("X-Real-IP");
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp.trim();
         }
         return exchange.getRemoteAddress().getAddress().getHostAddress();
     }

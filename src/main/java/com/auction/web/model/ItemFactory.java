@@ -13,15 +13,17 @@ public class ItemFactory {
             throw new IllegalArgumentException("Unknown item type: " + typeStr);
         }
 
+        String normalizedName = name == null ? "" : name.trim();
+        String normalizedDesc = description == null ? "" : description.trim();
         String normalizedExtra = extraInfo == null ? "" : extraInfo.trim();
         return switch (type) {
-            case ELECTRONICS -> new Electronics(id, name.trim(), description.trim(), startingPrice, normalizedExtra);
-            case ART -> new Art(id, name.trim(), description.trim(), startingPrice, normalizedExtra);
-            case VEHICLE -> new Vehicle(id, name.trim(), description.trim(), startingPrice, parseYear(normalizedExtra));
-            case BOOK -> new Book(id, name.trim(), description.trim(), startingPrice, normalizedExtra);
-            case FASHION -> new Fashion(id, name.trim(), description.trim(), startingPrice, normalizedExtra);
-            case COLLECTIBLE -> new Collectible(id, name.trim(), description.trim(), startingPrice, normalizedExtra);
-            case PROPERTY -> new Property(id, name.trim(), description.trim(), startingPrice, normalizedExtra);
+            case ELECTRONICS -> new Electronics(id, normalizedName, normalizedDesc, startingPrice, normalizedExtra);
+            case ART -> new Art(id, normalizedName, normalizedDesc, startingPrice, normalizedExtra);
+            case VEHICLE -> new Vehicle(id, normalizedName, normalizedDesc, startingPrice, parseYear(normalizedExtra));
+            case BOOK -> new Book(id, normalizedName, normalizedDesc, startingPrice, normalizedExtra);
+            case FASHION -> new Fashion(id, normalizedName, normalizedDesc, startingPrice, normalizedExtra);
+            case COLLECTIBLE -> new Collectible(id, normalizedName, normalizedDesc, startingPrice, normalizedExtra);
+            case PROPERTY -> new Property(id, normalizedName, normalizedDesc, startingPrice, normalizedExtra);
         };
     }
 

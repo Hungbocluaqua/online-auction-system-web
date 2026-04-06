@@ -1,5 +1,5 @@
 package com.auction.web.dto;
 
 public class AuctionLimitUpdateRequest {
-    public int auctionLimit;
+    public int limit;
 }
