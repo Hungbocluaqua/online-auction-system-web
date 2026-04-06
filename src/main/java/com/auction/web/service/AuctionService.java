@@ -1,39 +1,58 @@
 package com.auction.web.service;
 
 import com.auction.web.Logger;
+import com.auction.web.config.AppConfig;
 import com.auction.web.dto.AuctionCreateRequest;
 import com.auction.web.dto.AuctionUpdateRequest;
 import com.auction.web.dto.AuctionView;
 import com.auction.web.dto.SessionView;
 import com.auction.web.dto.UserView;
 import com.auction.web.model.*;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.sql.*;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class AuctionService {
-    private DatabaseManager db;
-    private final WebSocketServerImpl wsServer = new WebSocketServerImpl(8889);
+    private final DatabaseManager db;
+    private final WebSocketServerImpl wsServer;
     private final List<String> eventQueue = new CopyOnWriteArrayList<>();
+    private final AppConfig config;
+    private final long sessionTtlSeconds;
+    private final long idleTimeoutSeconds;
     private EmailService emailService;
     private ZaloPayService zaloPayService;
-    private String baseUrl = "http://localhost:8080";
+    private String baseUrl;
 
     public void setEmailService(EmailService emailService) { this.emailService = emailService; }
     public void setZaloPayService(ZaloPayService zaloPayService) { this.zaloPayService = zaloPayService; }
     public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
 
     public AuctionService() {
-        this(Boolean.getBoolean("test.db"));
+        this(Boolean.getBoolean("test.db"), null, null, null, AppConfig.load());
     }
 
     public AuctionService(boolean testMode) {
-        this(testMode, null, null, null);
+        this(testMode, null, null, null, AppConfig.load());
     }
 
     public AuctionService(boolean testMode, String pgUrl, String pgUser, String pgPass) {
+        this(testMode, pgUrl, pgUser, pgPass, AppConfig.load());
+    }
+
+    public AuctionService(boolean testMode, String pgUrl, String pgUser, String pgPass, AppConfig config) {
         System.out.println("AuctionService initialized. Using persistent sessions.");
-        db = new DatabaseManager(testMode, pgUrl, pgUser, pgPass);
+        this.config = config != null ? config : AppConfig.load();
+        this.sessionTtlSeconds = this.config.getSessionTtlSeconds();
+        this.idleTimeoutSeconds = this.config.getSessionIdleTimeoutSeconds();
+        this.baseUrl = this.config.getBaseUrl();
+        this.db = new DatabaseManager(testMode, pgUrl, pgUser, pgPass);
+        this.wsServer = new WebSocketServerImpl(testMode ? 0 : this.config.getWsPort());
         wsServer.setTokenValidator(token -> {
             try { requireUser(token); return true; } catch (Exception e) { return false; }
         });
@@ -63,6 +82,10 @@ public class AuctionService {
     // --- AUTH ---
 
     public SessionView login(String username, String password) {
+        return login(username, password, null);
+    }
+
+    public SessionView login(String username, String password, String twoFactorCode) {
         User user = findUserByUsername(username);
         if (user == null) throw new IllegalArgumentException("Invalid credentials");
         if (user.isLocked()) throw new IllegalStateException("Account is locked. Try again in " + ((user.getLockedUntil() - System.currentTimeMillis()) / 1000) + " seconds");
@@ -72,7 +95,12 @@ public class AuctionService {
             throw new IllegalArgumentException("Invalid credentials");
         }
         if (user.isTotpEnabled() && user.getTotpSecret() != null) {
-            throw new IllegalStateException("2FA_REQUIRED");
+            if (twoFactorCode == null || twoFactorCode.isBlank()) {
+                throw new IllegalStateException("2FA_REQUIRED");
+            }
+            if (!verifyTotpCode(user.getTotpSecret(), twoFactorCode)) {
+                throw new IllegalArgumentException("Invalid TOTP code");
+            }
         }
         user.resetFailedAttempts();
         updateUser(user);
@@ -96,8 +124,6 @@ public class AuctionService {
 
     private String getUsernameFromSession(String token) {
         if (token == null) return null;
-        long sessionTtlSeconds = 86400;
-        long idleTimeoutSeconds = 1800;
         try (Connection conn = db.getConnection();
              PreparedStatement ps = conn.prepareStatement("SELECT username, last_active_at, created_at FROM sessions WHERE token = ?")) {
             ps.setString(1, token);
@@ -106,11 +132,7 @@ public class AuctionService {
                 long lastActive = rs.getLong("last_active_at");
                 long now = System.currentTimeMillis();
                 long created = rs.getLong("created_at");
-                if (now - created > sessionTtlSeconds * 1000L) {
-                    try (PreparedStatement del = conn.prepareStatement("DELETE FROM sessions WHERE token = ?")) { del.setString(1, token); del.executeUpdate(); }
-                    return null;
-                }
-                if (now - lastActive > idleTimeoutSeconds * 1000L) {
+                if (now - created > sessionTtlSeconds * 1000L || now - lastActive > idleTimeoutSeconds * 1000L) {
                     try (PreparedStatement del = conn.prepareStatement("DELETE FROM sessions WHERE token = ?")) { del.setString(1, token); del.executeUpdate(); }
                     return null;
                 }
@@ -180,12 +202,15 @@ public class AuctionService {
         String resetToken = UUID.randomUUID().toString();
         long expiresAt = System.currentTimeMillis() + 3600000L;
         try (Connection conn = db.getConnection();
+             PreparedStatement delete = conn.prepareStatement("DELETE FROM password_reset_tokens WHERE username = ?");
              PreparedStatement ps = conn.prepareStatement("INSERT INTO password_reset_tokens (token, username, expires_at, used) VALUES (?, ?, ?, FALSE)")) {
+            delete.setString(1, username);
+            delete.executeUpdate();
             ps.setString(1, resetToken); ps.setString(2, username); ps.setLong(3, expiresAt);
             ps.executeUpdate();
         } catch (SQLException e) { throw new RuntimeException("Failed to create reset token", e); }
         if (emailService != null && user.getEmail() != null && !user.getEmail().isBlank()) {
-            emailService.sendPasswordReset(user.getEmail(), username, "http://localhost:8080/reset?token=" + resetToken);
+            emailService.sendPasswordReset(user.getEmail(), username, buildClientActionLink("reset-password", resetToken));
         }
         return "If an account exists with that username, a reset token has been generated";
     }
@@ -226,11 +251,17 @@ public class AuctionService {
         String verifyToken = UUID.randomUUID().toString();
         long expiresAt = System.currentTimeMillis() + 86400000L;
         try (Connection conn = db.getConnection();
+             PreparedStatement delete = conn.prepareStatement("DELETE FROM verification_tokens WHERE username = ?");
              PreparedStatement ps = conn.prepareStatement("INSERT INTO verification_tokens (token, username, email, expires_at, used) VALUES (?, ?, ?, ?, FALSE)")) {
+            delete.setString(1, user.getUsername());
+            delete.executeUpdate();
             ps.setString(1, verifyToken); ps.setString(2, user.getUsername());
             ps.setString(3, email); ps.setLong(4, expiresAt); ps.executeUpdate();
         } catch (SQLException e) { throw new RuntimeException("Failed to create verification token", e); }
-        return "Verification email sent. Token: " + verifyToken;
+        if (emailService != null) {
+            emailService.sendEmailVerification(email, buildClientActionLink("verify-email", verifyToken));
+        }
+        return "Verification email sent";
     }
 
     public SessionView confirmEmailVerification(String token) {
@@ -238,14 +269,17 @@ public class AuctionService {
             conn.setAutoCommit(false);
             try {
                 String username;
-                try (PreparedStatement ps = conn.prepareStatement("SELECT username FROM verification_tokens WHERE token = ? AND used = FALSE AND expires_at > ?")) {
+                String verifiedEmail;
+                try (PreparedStatement ps = conn.prepareStatement("SELECT username, email FROM verification_tokens WHERE token = ? AND used = FALSE AND expires_at > ?")) {
                     ps.setString(1, token); ps.setLong(2, System.currentTimeMillis());
                     ResultSet rs = ps.executeQuery();
                     if (!rs.next()) throw new IllegalArgumentException("Invalid or expired verification token");
                     username = rs.getString("username");
+                    verifiedEmail = rs.getString("email");
                 }
                 User user = findUserByUsername(username);
                 if (user == null) throw new IllegalArgumentException("User not found");
+                user.setEmail(verifiedEmail);
                 user.setEmailVerified(true);
                 updateUser(user);
                 try (PreparedStatement ps = conn.prepareStatement("UPDATE verification_tokens SET used = TRUE WHERE token = ?")) { ps.setString(1, token); ps.executeUpdate(); }
@@ -298,27 +332,7 @@ public class AuctionService {
         try (Connection conn = db.getConnection()) {
             conn.setAutoCommit(false);
             try {
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM autobids WHERE bidder_id = ?")) { ps.setString(1, user.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM bids WHERE bidder_id = ?")) { ps.setString(1, user.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("SELECT id FROM auctions WHERE owner_id = ?")) {
-                    ps.setString(1, user.getId());
-                    ResultSet rs = ps.executeQuery();
-                    while (rs.next()) {
-                        String auctionId = rs.getString("id");
-                        try (PreparedStatement ps2 = conn.prepareStatement("DELETE FROM autobids WHERE auction_id = ?")) { ps2.setString(1, auctionId); ps2.executeUpdate(); }
-                        try (PreparedStatement ps2 = conn.prepareStatement("DELETE FROM bids WHERE auction_id = ?")) { ps2.setString(1, auctionId); ps2.executeUpdate(); }
-                    }
-                }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM auctions WHERE owner_id = ?")) { ps.setString(1, user.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM watchlist WHERE user_id = ?")) { ps.setString(1, user.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM notifications WHERE user_id = ?")) { ps.setString(1, user.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM payments WHERE buyer_id = ?")) { ps.setString(1, user.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM disputes WHERE reporter_id = ?")) { ps.setString(1, user.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM invoices WHERE buyer_id = ?")) { ps.setString(1, user.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM users WHERE id = ?")) { ps.setString(1, user.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM sessions WHERE username = ?")) { ps.setString(1, user.getUsername()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM password_reset_tokens WHERE username = ?")) { ps.setString(1, user.getUsername()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM verification_tokens WHERE username = ?")) { ps.setString(1, user.getUsername()); ps.executeUpdate(); }
+                deleteUserCascade(conn, user.getId(), user.getUsername());
                 conn.commit();
                 return "Account deleted";
             } catch (SQLException e) { conn.rollback(); throw e; }
@@ -345,27 +359,7 @@ public class AuctionService {
         try (Connection conn = db.getConnection()) {
             conn.setAutoCommit(false);
             try {
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM autobids WHERE bidder_id = ?")) { ps.setString(1, target.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM bids WHERE bidder_id = ?")) { ps.setString(1, target.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("SELECT id FROM auctions WHERE owner_id = ?")) {
-                    ps.setString(1, target.getId());
-                    ResultSet rs = ps.executeQuery();
-                    while (rs.next()) {
-                        String auctionId = rs.getString("id");
-                        try (PreparedStatement ps2 = conn.prepareStatement("DELETE FROM autobids WHERE auction_id = ?")) { ps2.setString(1, auctionId); ps2.executeUpdate(); }
-                        try (PreparedStatement ps2 = conn.prepareStatement("DELETE FROM bids WHERE auction_id = ?")) { ps2.setString(1, auctionId); ps2.executeUpdate(); }
-                    }
-                }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM auctions WHERE owner_id = ?")) { ps.setString(1, target.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM watchlist WHERE user_id = ?")) { ps.setString(1, target.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM notifications WHERE user_id = ?")) { ps.setString(1, target.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM payments WHERE buyer_id = ?")) { ps.setString(1, target.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM disputes WHERE reporter_id = ?")) { ps.setString(1, target.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM invoices WHERE buyer_id = ?")) { ps.setString(1, target.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM users WHERE id = ?")) { ps.setString(1, target.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM sessions WHERE username = ?")) { ps.setString(1, target.getUsername()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM password_reset_tokens WHERE username = ?")) { ps.setString(1, target.getUsername()); ps.executeUpdate(); }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM verification_tokens WHERE username = ?")) { ps.setString(1, target.getUsername()); ps.executeUpdate(); }
+                deleteUserCascade(conn, target.getId(), target.getUsername());
                 conn.commit();
                 return getUsers(token);
             } catch (SQLException e) { conn.rollback(); throw e; }
@@ -673,15 +667,7 @@ public class AuctionService {
                     try (PreparedStatement ps = conn.prepareStatement("UPDATE auctions SET fulfillment_status = 'paid' WHERE id = ?")) {
                         ps.setString(1, auctionId); ps.executeUpdate();
                     }
-                    generateInvoice(conn, paymentId, auctionId, buyerId);
-                    addNotification(buyerId, "PAYMENT", "Your payment has been confirmed");
-                    try (PreparedStatement ps = conn.prepareStatement("SELECT owner_id FROM auctions WHERE id = ?")) {
-                        ps.setString(1, auctionId);
-                        ResultSet rs = ps.executeQuery();
-                        if (rs.next()) {
-                            addNotification(rs.getString("owner_id"), "PAYMENT", "Payment confirmed for auction " + auctionId);
-                        }
-                    }
+                    notifyPaymentConfirmed(conn, paymentId, auctionId, buyerId, "Your payment has been confirmed");
                 }
                 conn.commit();
                 return "Payment " + status;
@@ -738,15 +724,7 @@ public class AuctionService {
                     try (PreparedStatement ps = conn.prepareStatement("UPDATE auctions SET fulfillment_status = 'paid' WHERE id = ?")) {
                         ps.setString(1, auctionId); ps.executeUpdate();
                     }
-                    generateInvoice(conn, paymentId, auctionId, buyerId);
-                    addNotification(buyerId, "PAYMENT", "Your payment has been confirmed via ZaloPay");
-                    try (PreparedStatement ps = conn.prepareStatement("SELECT owner_id FROM auctions WHERE id = ?")) {
-                        ps.setString(1, auctionId);
-                        ResultSet rs = ps.executeQuery();
-                        if (rs.next()) {
-                            addNotification(rs.getString("owner_id"), "PAYMENT", "Payment confirmed for auction " + auctionId);
-                        }
-                    }
+                    notifyPaymentConfirmed(conn, paymentId, auctionId, buyerId, "Your payment has been confirmed via ZaloPay");
                     Logger.info("Payment completed via ZaloPay IPN: paymentId=" + paymentId + " zpTransId=" + zpTransId);
                     result.put("return_code", 1);
                     result.put("return_message", "Payment confirmed");
@@ -1085,6 +1063,18 @@ public class AuctionService {
         } catch (SQLException e) { System.err.println("Failed to add notification: " + e.getMessage()); }
     }
 
+    private void notifyPaymentConfirmed(Connection conn, String paymentId, String auctionId, String buyerId, String buyerMessage) {
+        generateInvoice(conn, paymentId, auctionId, buyerId);
+        addNotification(buyerId, "PAYMENT", buyerMessage);
+        try (PreparedStatement ps = conn.prepareStatement("SELECT owner_id FROM auctions WHERE id = ?")) {
+            ps.setString(1, auctionId);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                addNotification(rs.getString("owner_id"), "PAYMENT", "Payment confirmed for auction " + auctionId);
+            }
+        } catch (SQLException e) { System.err.println("Failed to notify seller: " + e.getMessage()); }
+    }
+
     private void generateInvoice(Connection conn, String paymentId, String auctionId, String buyerId) {
         try {
             String invoiceId = UUID.randomUUID().toString();
@@ -1291,13 +1281,42 @@ public class AuctionService {
     private String generateTotp(String secret, long timeCounter) {
         try {
             javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA1");
-            mac.init(new javax.crypto.spec.SecretKeySpec(secret.getBytes(java.nio.charset.StandardCharsets.UTF_8), "HmacSHA1"));
+            mac.init(new javax.crypto.spec.SecretKeySpec(decodeBase32(secret), "HmacSHA1"));
             byte[] timeBytes = java.nio.ByteBuffer.allocate(8).putLong(timeCounter).array();
             byte[] hash = mac.doFinal(timeBytes);
             int offset = hash[hash.length - 1] & 0xF;
             int binary = ((hash[offset] & 0x7F) << 24) | ((hash[offset + 1] & 0xFF) << 16) | ((hash[offset + 2] & 0xFF) << 8) | (hash[offset + 3] & 0xFF);
             return String.format("%06d", binary % 1000000);
         } catch (Exception e) { return ""; }
+    }
+
+    private byte[] decodeBase32(String secret) {
+        String normalized = secret == null ? "" : secret.replace("=", "").replace(" ", "").toUpperCase(Locale.ROOT);
+        if (normalized.isEmpty()) {
+            return new byte[0];
+        }
+        byte[] output = new byte[(normalized.length() * 5) / 8];
+        int buffer = 0;
+        int bitsLeft = 0;
+        int index = 0;
+        for (int i = 0; i < normalized.length(); i++) {
+            char c = normalized.charAt(i);
+            int value;
+            if (c >= 'A' && c <= 'Z') {
+                value = c - 'A';
+            } else if (c >= '2' && c <= '7') {
+                value = 26 + (c - '2');
+            } else {
+                throw new IllegalArgumentException("Invalid base32 secret");
+            }
+            buffer = (buffer << 5) | value;
+            bitsLeft += 5;
+            if (bitsLeft >= 8) {
+                output[index++] = (byte) ((buffer >> (bitsLeft - 8)) & 0xFF);
+                bitsLeft -= 8;
+            }
+        }
+        return index == output.length ? output : Arrays.copyOf(output, index);
     }
 
     // --- CATEGORIES ---
@@ -1350,6 +1369,7 @@ public class AuctionService {
                 }
             }
             result.put("auctions", views);
+            result.put("items", views);
             result.put("total", total);
             result.put("page", page);
             result.put("limit", limit);
@@ -1561,41 +1581,52 @@ public class AuctionService {
         }
     }
 
-    private void seedDataIfEmpty() {
-        if (findUserByUsername("admin") != null) return;
-        try {
-            String adminId = UUID.randomUUID().toString();
-            User admin = new User(adminId, "admin", generateRandomPassword(), User.Role.ADMIN);
-            try (Connection conn = db.getConnection();
-                 PreparedStatement ps = conn.prepareStatement("INSERT INTO users (id, username, password, role, auction_limit, created_at, email, email_verified, failed_login_attempts, locked_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
-                ps.setString(1, admin.getId()); ps.setString(2, admin.getUsername());
-                ps.setString(3, admin.getPasswordHashForStorage()); ps.setString(4, User.Role.ADMIN.name());
-                ps.setInt(5, admin.getAuctionLimit()); ps.setLong(6, admin.getCreatedAt());
-                ps.setString(7, null); ps.setBoolean(8, false); ps.setInt(9, 0); ps.setLong(10, 0);
-                ps.executeUpdate();
+    private void deleteUserCascade(Connection conn, String userId, String username) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement("DELETE FROM autobids WHERE bidder_id = ?")) { ps.setString(1, userId); ps.executeUpdate(); }
+        try (PreparedStatement ps = conn.prepareStatement("DELETE FROM bids WHERE bidder_id = ?")) { ps.setString(1, userId); ps.executeUpdate(); }
+        try (PreparedStatement ps = conn.prepareStatement("SELECT id FROM auctions WHERE owner_id = ?")) {
+            ps.setString(1, userId);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                String auctionId = rs.getString("id");
+                try (PreparedStatement ps2 = conn.prepareStatement("DELETE FROM autobids WHERE auction_id = ?")) { ps2.setString(1, auctionId); ps2.executeUpdate(); }
+                try (PreparedStatement ps2 = conn.prepareStatement("DELETE FROM bids WHERE auction_id = ?")) { ps2.setString(1, auctionId); ps2.executeUpdate(); }
             }
-            register("seller1", "TestP@ss1!", "USER");
-            register("bidder1", "TestP@ss2!", "USER");
+        }
+        try (PreparedStatement ps = conn.prepareStatement("DELETE FROM auctions WHERE owner_id = ?")) { ps.setString(1, userId); ps.executeUpdate(); }
+        try (PreparedStatement ps = conn.prepareStatement("DELETE FROM watchlist WHERE user_id = ?")) { ps.setString(1, userId); ps.executeUpdate(); }
+        try (PreparedStatement ps = conn.prepareStatement("DELETE FROM notifications WHERE user_id = ?")) { ps.setString(1, userId); ps.executeUpdate(); }
+        try (PreparedStatement ps = conn.prepareStatement("DELETE FROM payments WHERE buyer_id = ?")) { ps.setString(1, userId); ps.executeUpdate(); }
+        try (PreparedStatement ps = conn.prepareStatement("DELETE FROM disputes WHERE reporter_id = ?")) { ps.setString(1, userId); ps.executeUpdate(); }
+        try (PreparedStatement ps = conn.prepareStatement("DELETE FROM invoices WHERE buyer_id = ?")) { ps.setString(1, userId); ps.executeUpdate(); }
+        try (PreparedStatement ps = conn.prepareStatement("DELETE FROM users WHERE id = ?")) { ps.setString(1, userId); ps.executeUpdate(); }
+        try (PreparedStatement ps = conn.prepareStatement("DELETE FROM sessions WHERE username = ?")) { ps.setString(1, username); ps.executeUpdate(); }
+        try (PreparedStatement ps = conn.prepareStatement("DELETE FROM password_reset_tokens WHERE username = ?")) { ps.setString(1, username); ps.executeUpdate(); }
+        try (PreparedStatement ps = conn.prepareStatement("DELETE FROM verification_tokens WHERE username = ?")) { ps.setString(1, username); ps.executeUpdate(); }
+    }
+
+    private void seedDataIfEmpty() {
+        try {
+            User admin = findUserByUsername("admin");
+            if (admin == null) {
+                String adminId = UUID.randomUUID().toString();
+                String adminPassword = initialAdminPassword();
+                User newAdmin = new User(adminId, "admin", adminPassword, User.Role.ADMIN);
+                try (Connection conn = db.getConnection();
+                     PreparedStatement ps = conn.prepareStatement("INSERT INTO users (id, username, password, role, auction_limit, created_at, email, email_verified, failed_login_attempts, locked_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+                    ps.setString(1, newAdmin.getId()); ps.setString(2, newAdmin.getUsername());
+                    ps.setString(3, newAdmin.getPasswordHashForStorage()); ps.setString(4, User.Role.ADMIN.name());
+                    ps.setInt(5, newAdmin.getAuctionLimit()); ps.setLong(6, newAdmin.getCreatedAt());
+                    ps.setString(7, null); ps.setBoolean(8, false); ps.setInt(9, 0); ps.setLong(10, 0);
+                    ps.executeUpdate();
+                }
+                announceBootstrapAdminCredentials(adminPassword);
+                register("seller1", "TestP@ss1!", "USER");
+                register("bidder1", "TestP@ss2!", "USER");
+            }
         } catch (Exception e) {
             Logger.warn("Seed data failed: " + e.getMessage());
         }
-    }
-    private String generateRandomPassword() {
-        String upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        String lower = upper.toLowerCase();
-        String digits = "0123456789";
-        String special = "!@#$%^&*";
-        java.security.SecureRandom random = new java.security.SecureRandom();
-        StringBuilder sb = new StringBuilder();
-        sb.append(upper.charAt(random.nextInt(upper.length())));
-        sb.append(lower.charAt(random.nextInt(lower.length())));
-        sb.append(digits.charAt(random.nextInt(digits.length())));
-        sb.append(special.charAt(random.nextInt(special.length())));
-        for (int i = 0; i < 12; i++) {
-            String all = upper + lower + digits + special;
-            sb.append(all.charAt(random.nextInt(all.length())));
-        }
-        return sb.toString();
     }
 
 
@@ -1636,7 +1667,9 @@ public class AuctionService {
     }
 
     private SessionView toSessionView(String token, User user) {
-        return new SessionView(token, user.getId(), user.getUsername(), user.getRole(), user.getAuctionLimit(), user.getCreatedAt());
+        SessionView view = new SessionView(token, user.getId(), user.getUsername(), user.getRole(), user.getAuctionLimit(), user.getCreatedAt());
+        view.setTwoFaEnabled(user.isTotpEnabled());
+        return view;
     }
 
     private UserView toUserView(User user) {
@@ -1645,5 +1678,38 @@ public class AuctionService {
 
     public DatabaseManager getDbManager() {
         return db;
+    }
+
+    private String buildClientActionLink(String action, String token) {
+        return baseUrl + "/?action=" + urlEncode(action) + "&token=" + urlEncode(token);
+    }
+
+    private String urlEncode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private String initialAdminPassword() {
+        if (config.getAdminPassword() != null && !config.getAdminPassword().isBlank()) {
+            return config.getAdminPassword();
+        }
+        return "Adm!" + UUID.randomUUID().toString().replace("-", "").substring(0, 12) + "9";
+    }
+
+    private void announceBootstrapAdminCredentials(String adminPassword) {
+        String message = "Bootstrap admin created. Username=admin Password=" + adminPassword;
+        Logger.warn(message);
+        try {
+            Path credentialsLog = Path.of("data", "bootstrap-admin-credentials.log");
+            Files.createDirectories(credentialsLog.getParent());
+            Files.writeString(
+                credentialsLog,
+                Instant.now() + " " + message + System.lineSeparator(),
+                StandardOpenOption.CREATE,
+                StandardOpenOption.APPEND
+            );
+            Logger.warn("Bootstrap admin credentials written to " + credentialsLog);
+        } catch (Exception e) {
+            Logger.warn("Failed to persist bootstrap admin credentials: " + e.getMessage());
+        }
     }
 }

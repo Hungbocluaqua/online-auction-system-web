@@ -1,6 +1,7 @@
 package com.auction.web.service;
 
 import com.auction.web.Logger;
+import com.auction.web.http.HttpUtil;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -16,7 +17,7 @@ public class ZaloPayService {
     private final String key1;
     private final String key2;
     private final String baseUrl;
-    private final HttpClient client = HttpClient.newHttpClient();
+    private final HttpClient client = HttpUtil.sharedClient();
 
     public ZaloPayService(int appId, String key1, String key2, boolean production) {
         this.appId = appId;
@@ -46,7 +47,7 @@ public class ZaloPayService {
             String item = "[]";
             String bankCode = "";
             String macData = appId + "|" + appTransId + "|" + appTime + "|" + buyerUsername + "|" + amountVnd + "|" + description + "|" + embedData + "|" + item + "|" + bankCode;
-            String mac = hmacHex(key1, macData);
+            String mac = HttpUtil.hmacSha256Hex(key1, macData);
 
             String body = "app_id=" + appId
                 + "&app_user=" + URLEncoder.encode(buyerUsername, StandardCharsets.UTF_8)
@@ -80,7 +81,7 @@ public class ZaloPayService {
 
     public boolean verifyCallback(String data, String mac) {
         if (!isConfigured()) return true;
-        String expectedMac = hmacHex(key2, data);
+        String expectedMac = HttpUtil.hmacSha256Hex(key2, data);
         return expectedMac.equals(mac);
     }
 
@@ -97,7 +98,7 @@ public class ZaloPayService {
         try {
             long appTime = System.currentTimeMillis();
             String macData = appId + "|" + appTransId + "|" + key1;
-            String mac = hmacHex(key1, macData);
+            String mac = HttpUtil.hmacSha256Hex(key1, macData);
 
             String body = "app_id=" + appId
                 + "&app_trans_id=" + appTransId
@@ -122,45 +123,25 @@ public class ZaloPayService {
         }
     }
 
-    private String hmacHex(String key, String data) {
-        try {
-            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
-            mac.init(new javax.crypto.spec.SecretKeySpec(key.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-            byte[] hash = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
-            return bytesToHex(hash);
-        } catch (Exception e) {
-            throw new RuntimeException("HMAC computation failed", e);
-        }
-    }
-
-    private String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
-    }
-
     private Map<String, Object> parseResponse(String json) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        try {
-            com.google.gson.Gson gson = new com.google.gson.Gson();
-            @SuppressWarnings("unchecked")
-            Map<String, Object> parsed = gson.fromJson(json, Map.class);
-            result.put("return_code", parsed.get("return_code"));
-            result.put("return_message", parsed.get("return_message"));
-            result.put("zp_trans_token", parsed.get("zp_trans_token"));
-            result.put("order_url", parsed.get("order_url"));
-            result.put("order_token", parsed.get("order_token"));
-            result.put("qr_code", parsed.get("qr_code"));
-            result.put("zp_trans_id", parsed.get("zp_trans_id"));
-            result.put("is_processing", parsed.get("is_processing"));
-            result.put("status", parsed.get("status"));
-            result.put("amount", parsed.get("amount"));
-        } catch (Exception e) {
+        Map<String, Object> parsed = HttpUtil.parseJsonToMap(json);
+        if (parsed == null) {
+            Map<String, Object> result = new LinkedHashMap<>();
             result.put("return_code", -1);
             result.put("return_message", "Failed to parse response");
+            return result;
         }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("return_code", parsed.get("return_code"));
+        result.put("return_message", parsed.get("return_message"));
+        result.put("zp_trans_token", parsed.get("zp_trans_token"));
+        result.put("order_url", parsed.get("order_url"));
+        result.put("order_token", parsed.get("order_token"));
+        result.put("qr_code", parsed.get("qr_code"));
+        result.put("zp_trans_id", parsed.get("zp_trans_id"));
+        result.put("is_processing", parsed.get("is_processing"));
+        result.put("status", parsed.get("status"));
+        result.put("amount", parsed.get("amount"));
         return result;
     }
 }

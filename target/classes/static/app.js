@@ -14,7 +14,8 @@ const state = {
     myAuctionsTab: 'all',
     historyTab: 'all',
     editingAuctionId: null,
-    twoFaSecret: null
+    twoFaSecret: null,
+    runtimeConfig: { wsPort: null }
 };
 
 function escapeHtml(str) {
@@ -72,6 +73,35 @@ const els = {
     categoryFilter: document.getElementById("categoryFilter")
 };
 
+const CATEGORY_META = {
+    ELECTRONICS: { label: "Electronics", blurb: "Phones, gadgets, gaming gear, and connected tech." },
+    ART: { label: "Art", blurb: "Original works, prints, and studio-made pieces." },
+    VEHICLE: { label: "Vehicle", blurb: "Cars, bikes, specialty builds, and transport finds." },
+    BOOK: { label: "Book", blurb: "Rare editions, sets, manga, and collectible reading." },
+    FASHION: { label: "Fashion", blurb: "Designer apparel, watches, shoes, and accessories." },
+    COLLECTIBLE: { label: "Collectible", blurb: "Cards, memorabilia, toys, trophies, and one-off pieces." },
+    PROPERTY: { label: "Property", blurb: "Land, rental assets, spaces, and long-term holdings." }
+};
+
+function showTwoFactorPrompt() {
+    const group = document.getElementById("loginTwoFaGroup");
+    const input = document.getElementById("loginTwoFaCode");
+    group?.classList.remove("hidden");
+    if (input) input.required = true;
+    els.authSubmit.textContent = "Verify and Sign In";
+}
+
+function hideTwoFactorPrompt() {
+    const group = document.getElementById("loginTwoFaGroup");
+    const input = document.getElementById("loginTwoFaCode");
+    group?.classList.add("hidden");
+    if (input) {
+        input.required = false;
+        input.value = "";
+    }
+    els.authSubmit.textContent = state.authMode === "register" ? "Create Account" : "Sign In";
+}
+
 async function api(path, options = {}) {
     const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
     if (state.token) headers.Authorization = `Bearer ${state.token}`;
@@ -79,19 +109,25 @@ async function api(path, options = {}) {
         headers["X-CSRF-Token"] = state.csrfToken;
     }
     const response = await fetch(path, { ...options, headers });
-    let payload;
-    try {
-        payload = await response.json();
-    } catch (e) {
-        const text = await response.text();
-        throw new Error(`Server returned ${response.status}: ${text || 'Invalid response'}`);
+    const rawBody = await response.text();
+    let payload = null;
+    if (rawBody) {
+        try {
+            payload = JSON.parse(rawBody);
+        } catch (e) {
+            if (!response.ok) {
+                throw new Error(`Server returned ${response.status}: ${rawBody}`);
+            }
+            throw new Error(`Server returned ${response.status}: ${rawBody || 'Invalid response'}`);
+        }
     }
     if (response.status === 401) {
         saveSession(null);
         renderNav();
         switchView('landing');
-        throw new Error("Session expired. Please sign in again.");
+        throw new Error(payload?.message || "Session expired. Please sign in again.");
     }
+    if (!payload) throw new Error(`Server returned ${response.status}: ${rawBody || 'Invalid response'}`);
     if (!payload.success) throw new Error(payload.message || "Request failed");
     return payload.data;
 }
@@ -162,6 +198,24 @@ function getIcon(type) {
     return icons[type?.toUpperCase()] || '📦';
 }
 
+function formatCategoryName(category) {
+    const normalized = String(category || "").toUpperCase();
+    return CATEGORY_META[normalized]?.label || (normalized.charAt(0) + normalized.slice(1).toLowerCase());
+}
+
+function categoryMark(category) {
+    const label = formatCategoryName(category);
+    return label.split(/\s+/).map(part => part[0]).join("").slice(0, 2).toUpperCase() || "CT";
+}
+
+function selectCategory(category) {
+    if (els.categoryFilter) {
+        els.categoryFilter.value = category || "All";
+    }
+    switchView('auctions');
+    renderAuctions();
+}
+
 function createAuctionCard(auction, options = {}) {
     const isEnded = auction.state === 'FINISHED' || auction.state === 'CANCELED';
     const timeLabel = isEnded ? 'Ended' : relativeEndShort(auction.endTime);
@@ -229,25 +283,83 @@ function renderAuctions() {
 }
 
 function renderCategories() {
-    const categories = ['ELECTRONICS', 'ART', 'VEHICLE', 'BOOK', 'FASHION', 'COLLECTIBLE', 'PROPERTY'];
     const grid = document.getElementById("categoriesGrid");
+    const highlights = document.getElementById("categoriesHighlights");
+    const summary = document.getElementById("categoriesSummary");
     if (!grid) return;
-    grid.innerHTML = categories.map(cat => {
-        const items = state.auctions.filter(a => a.itemType === cat && a.state === 'RUNNING');
-        return `
-            <div class="category-card" data-category="${cat}">
-                <div style="font-size:3rem; margin-bottom:0.5rem;">${getIcon(cat)}</div>
-                <h3>${cat.charAt(0) + cat.slice(1).toLowerCase()}</h3>
-                <p class="subtle">${items.length} active auctions</p>
+
+    const knownCategories = new Set(Object.keys(CATEGORY_META));
+    state.auctions.forEach(auction => {
+        if (auction?.itemType) knownCategories.add(String(auction.itemType).toUpperCase());
+    });
+
+    const categories = [...knownCategories].map(category => {
+        const allItems = state.auctions.filter(a => String(a.itemType || "").toUpperCase() === category);
+        const activeItems = allItems
+            .filter(a => a.state === 'RUNNING')
+            .sort((a, b) => a.endTime - b.endTime)
+            .slice(0, 2);
+        return {
+            category,
+            label: formatCategoryName(category),
+            blurb: CATEGORY_META[category]?.blurb || "Browse current listings in this category.",
+            totalCount: allItems.length,
+            activeCount: allItems.filter(a => a.state === 'RUNNING').length,
+            previewItems: activeItems
+        };
+    }).sort((a, b) => b.activeCount - a.activeCount || b.totalCount - a.totalCount || a.label.localeCompare(b.label));
+
+    const totalLive = categories.reduce((sum, category) => sum + category.activeCount, 0);
+    const busiest = categories[0];
+    if (summary) {
+        summary.textContent = `${totalLive} live auctions across ${categories.length} categories. Start where the market is moving.`;
+    }
+    if (highlights) {
+        highlights.innerHTML = `
+            <div class="category-highlight">
+                <span class="subtle">Live Listings</span>
+                <span class="category-highlight-value">${totalLive}</span>
+            </div>
+            <div class="category-highlight">
+                <span class="subtle">Busiest Category</span>
+                <span class="category-highlight-value">${escapeHtml(busiest?.label || "None")}</span>
+            </div>
+            <div class="category-highlight">
+                <span class="subtle">Catalog Size</span>
+                <span class="category-highlight-value">${state.auctions.length}</span>
             </div>
         `;
-    }).join("");
-    grid.querySelectorAll('.category-card').forEach(card => {
-        card.addEventListener('click', () => {
-            els.categoryFilter.value = card.dataset.category;
-            switchView('auctions');
-            renderAuctions();
-        });
+    }
+
+    grid.innerHTML = categories.map(category => `
+        <article class="category-card">
+            <div class="category-card-head">
+                <div class="category-mark">${escapeHtml(categoryMark(category.category))}</div>
+                <span class="category-balance">${category.activeCount} live</span>
+            </div>
+            <h3>${escapeHtml(category.label)}</h3>
+            <p class="subtle">${escapeHtml(category.blurb)}</p>
+            ${category.previewItems.length ? `
+                <div class="category-preview-list">
+                    ${category.previewItems.map(item => `
+                        <div class="category-preview-item">
+                            <span>${escapeHtml(item.itemName)}</span>
+                            <strong>${formatMoney(item.currentPrice, item.currency)}</strong>
+                        </div>
+                    `).join("")}
+                </div>
+            ` : `
+                <div class="category-empty">No live auctions in this category right now.</div>
+            `}
+            <div class="category-card-footer">
+                <p class="subtle">${category.totalCount} total listings</p>
+                <button class="category-card-action" type="button" data-category-select="${escapeHtml(category.category)}">View category</button>
+            </div>
+        </article>
+    `).join("");
+
+    grid.querySelectorAll('[data-category-select]').forEach(button => {
+        button.addEventListener('click', () => selectCategory(button.dataset.categorySelect));
     });
 }
 
@@ -427,65 +539,6 @@ async function renderAdminRefunds() {
         });
     }
 }
-    const adminRefundsLink = document.getElementById("adminRefundsLink");
-    if (adminRefundsLink) adminRefundsLink.classList.toggle("hidden", state.session?.role !== "ADMIN");
-}
-
-async function renderAdminRefunds() {
-    if (!state.token || state.session?.role !== "ADMIN") return;
-    let refunds = [];
-    try {
-        refunds = await api("/api/admin/refunds");
-    } catch (e) { refunds = []; }
-    const tbody = document.getElementById("refundsTableBody");
-    const empty = document.getElementById("refundsEmpty");
-    if (!refunds || refunds.length === 0) {
-        tbody.innerHTML = "";
-        empty.classList.remove("hidden");
-    } else {
-        empty.classList.add("hidden");
-        tbody.innerHTML = refunds.map(r => `
-            <tr>
-                <td>${escapeHtml(r.id)}</td>
-                <td>${escapeHtml(r.auctionId || '-')}</td>
-                <td>${escapeHtml(r.username || '-')}</td>
-                <td>${formatMoney(r.amount || 0, 'VND')}</td>
-                <td>${escapeHtml(r.reason || '-')}</td>
-                <td><span class="status-pill ${escapeHtml(r.status || 'PENDING')}">${escapeHtml(r.status || 'PENDING')}</span></td>
-                <td class="actions-cell">
-                    ${(r.status === 'PENDING') ? `
-                        <button class="btn-secondary approve-refund-btn" data-refund-id="${escapeHtml(r.id)}" style="color: var(--success); border-color: var(--success);">Approve</button>
-                        <button class="btn-secondary reject-refund-btn" data-refund-id="${escapeHtml(r.id)}" style="color: var(--danger); border-color: var(--danger);">Reject</button>
-                    ` : '-'}
-                </td>
-            </tr>
-        `).join("");
-        tbody.querySelectorAll('.approve-refund-btn').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                try {
-                    await api(`/api/admin/refunds/${btn.dataset.refundId}`, {
-                        method: "PUT",
-                        body: JSON.stringify({ action: "approve" })
-                    });
-                    notify("Refund approved", "success");
-                    renderAdminRefunds();
-                } catch (e) { notify(e.message, "danger"); }
-            });
-        });
-        tbody.querySelectorAll('.reject-refund-btn').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                try {
-                    await api(`/api/admin/refunds/${btn.dataset.refundId}`, {
-                        method: "PUT",
-                        body: JSON.stringify({ action: "reject" })
-                    });
-                    notify("Refund rejected", "info");
-                    renderAdminRefunds();
-                } catch (e) { notify(e.message, "danger"); }
-            });
-        });
-    }
-}
 
 async function renderNotifications() {
     if (!state.token) return;
@@ -525,6 +578,10 @@ function renderAccount() {
     const twoFaStatus = document.getElementById("twoFaStatus");
     const enableBtn = document.getElementById("enable2faBtn");
     const disableBtn = document.getElementById("disable2faBtn");
+    const emailInput = document.getElementById("emailInput");
+    if (emailInput && state.session?.email) {
+        emailInput.value = state.session.email;
+    }
     if (state.session?.twoFaEnabled) {
         twoFaStatus.textContent = "2FA is enabled";
         twoFaStatus.style.color = "var(--success)";
@@ -601,40 +658,6 @@ function openDetail(id) {
             }
         } else {
             paymentSection.classList.add("hidden");
-        }
-    }
-    const refundSection = document.getElementById("refundSection");
-    const requestRefundBtn = document.getElementById("requestRefundBtn");
-    const refundStatusText = document.getElementById("refundStatusText");
-    if (refundSection) {
-        const isWinner = auction.highestBidderId === state.session?.userId;
-        const isOwner = auction.ownerId === state.session?.userId;
-        if (isEnded && isWinner && !isOwner && (auction.fulfillmentStatus === 'paid' || auction.fulfillmentStatus === 'delivered')) {
-            refundSection.classList.remove("hidden");
-            if (auction.fulfillmentStatus === 'paid') {
-                refundStatusText.textContent = "You can request a refund if needed.";
-                refundStatusText.style.color = "";
-                requestRefundBtn.classList.remove("hidden");
-            } else if (auction.fulfillmentStatus === 'delivered') {
-                refundStatusText.textContent = "Item delivered. Refund requests may still be possible.";
-                refundStatusText.style.color = "";
-                requestRefundBtn.classList.remove("hidden");
-            }
-        } else {
-            refundSection.classList.add("hidden");
-        }
-    }
-    const buyNowSection = document.getElementById("buyNowSection");
-    const buyNowBtn = document.getElementById("buyNowBtn");
-    const buyNowPriceLabel = document.getElementById("buyNowPriceLabel");
-    if (buyNowSection && buyNowBtn) {
-        const isOwner = auction.ownerId === state.session?.userId;
-        const isRunning = auction.state === 'RUNNING';
-        if (isRunning && !isOwner && auction.buyItNowPrice > 0) {
-            buyNowSection.classList.remove("hidden");
-            buyNowPriceLabel.textContent = formatMoney(auction.buyItNowPrice, auction.currency);
-        } else {
-            buyNowSection.classList.add("hidden");
         }
     }
     const refundSection = document.getElementById("refundSection");
@@ -763,6 +786,10 @@ document.getElementById("markAllReadBtn")?.addEventListener('click', async () =>
     } catch (e) { notify(e.message, "danger"); }
 });
 
+document.getElementById("browseAllCategoriesBtn")?.addEventListener('click', () => {
+    selectCategory("All");
+});
+
 function openAuth(mode) {
     state.authMode = mode;
     const isReg = mode === 'register';
@@ -770,7 +797,21 @@ function openAuth(mode) {
     els.authSubmit.textContent = isReg ? 'Create Account' : 'Sign In';
     els.authToggleText.textContent = isReg ? 'Already have an account?' : "Don't have an account?";
     els.authToggleLink.textContent = isReg ? 'Sign in' : 'Sign up';
+    hideTwoFactorPrompt();
+    fetchCaptcha();
     switchView('auth');
+}
+
+async function fetchCaptcha() {
+    try {
+        const res = await api("/api/captcha");
+        document.getElementById("captchaLabel").textContent = res.question;
+        document.getElementById("captchaChallengeId").value = res.challengeId;
+        document.getElementById("captchaAnswer").value = "";
+    } catch (e) {
+        document.getElementById("captchaLabel").textContent = "What is 6 + 4?";
+        document.getElementById("captchaChallengeId").value = "stub";
+    }
 }
 
 els.authToggleLink.addEventListener('click', e => {
@@ -778,22 +819,47 @@ els.authToggleLink.addEventListener('click', e => {
     openAuth(state.authMode === 'login' ? 'register' : 'login');
 });
 
+document.getElementById("forgotPasswordLink")?.addEventListener('click', async e => {
+    e.preventDefault();
+    const currentUsername = els.authForm?.elements?.username?.value || "";
+    const username = prompt("Enter your username to receive a password reset link:", currentUsername);
+    if (!username) return;
+    try {
+        await api("/api/password-reset/request", {
+            method: "POST",
+            body: JSON.stringify({ username })
+        });
+        notify("If the account exists, a reset link has been sent.", "info");
+    } catch (err) {
+        notify(err.message, "danger");
+    }
+});
+
 els.authForm.addEventListener('submit', async e => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData.entries());
+    data.captchaChallengeId = document.getElementById("captchaChallengeId").value;
+    data.captchaAnswer = Number(document.getElementById("captchaAnswer").value);
     const isReg = state.authMode === 'register';
     try {
         const session = await api(isReg ? "/api/register" : "/api/login", {
             method: "POST",
             body: JSON.stringify(data)
         });
+        hideTwoFactorPrompt();
         saveSession(session);
         renderNav();
         switchView('dashboard');
         notify(isReg ? "Account created!" : "Welcome back!", "success");
         await loadAuctions();
     } catch (err) {
+        if (!isReg && err.message === "2FA_REQUIRED") {
+            showTwoFactorPrompt();
+            await fetchCaptcha();
+            notify("Enter your authenticator code to finish signing in.", "info");
+            return;
+        }
         notify(err.message, "danger");
     }
 });
@@ -825,6 +891,8 @@ document.getElementById("placeBidBtn").addEventListener('click', async () => {
 document.getElementById("autoBidBtn").addEventListener('click', async () => {
     const maxBid = Number(document.getElementById("autoMaxInput").value);
     const increment = Number(document.getElementById("autoIncInput").value);
+    if (!Number.isFinite(maxBid) || maxBid <= 0) { notify("Enter a valid auto-bid maximum", "danger"); return; }
+    if (!Number.isFinite(increment) || increment <= 0) { notify("Enter a valid auto-bid increment", "danger"); return; }
     try {
         await api(`/api/auctions/${state.selectedAuctionId}/autobid`, {
             method: "POST",
@@ -847,6 +915,31 @@ document.getElementById("watchBtn")?.addEventListener('click', async () => {
             await api("/api/watchlist", { method: "POST", body: JSON.stringify({ auctionId }) });
             notify("Added to watchlist", "success");
         }
+        await loadAuctions();
+        openDetail(auctionId);
+    } catch (err) { notify(err.message, "danger"); }
+});
+
+document.getElementById("buyNowBtn")?.addEventListener('click', async () => {
+    const auctionId = state.selectedAuctionId;
+    if (!auctionId) return;
+    if (!state.token) {
+        notify("Please sign in to use Buy It Now", "danger");
+        openAuth('login');
+        return;
+    }
+    const auction = state.auctions.find(a => a.id === auctionId);
+    if (!auction) return;
+    const confirmed = window.confirm(`Buy "${auction.itemName}" now for ${formatMoney(auction.buyItNowPrice, auction.currency)}? This will end the auction immediately.`);
+    if (!confirmed) return;
+    try {
+        const result = await api(`/api/auctions/${auctionId}/buy-now`, { method: "POST" });
+        if (result.orderUrl) {
+            notify("Redirecting to ZaloPay...", "info");
+            window.location.href = result.orderUrl;
+            return;
+        }
+        notify(result.message || "Buy It Now initiated", "success");
         await loadAuctions();
         openDetail(auctionId);
     } catch (err) { notify(err.message, "danger"); }
@@ -881,56 +974,6 @@ document.getElementById("markReceivedBtn")?.addEventListener('click', async () =
         notify("Item marked as received!", "success");
         await loadAuctions();
         openDetail(auctionId);
-    } catch (err) { notify(err.message, "danger"); }
-});
-
-document.getElementById("buyNowBtn")?.addEventListener('click', async () => {
-    const auctionId = state.selectedAuctionId;
-    if (!auctionId) return;
-    if (!confirm("Buy this item now at the listed price?")) return;
-    try {
-        const result = await api(`/api/auctions/${auctionId}/buy-now`, { method: "POST" });
-        if (result.orderUrl) {
-            notify("Redirecting to ZaloPay...", "info");
-            window.location.href = result.orderUrl;
-        } else {
-            notify("Buy-it-now purchase successful!", "success");
-            await loadAuctions();
-            openDetail(auctionId);
-        }
-    } catch (err) { notify(err.message, "danger"); }
-});
-
-document.getElementById("requestRefundBtn")?.addEventListener('click', async () => {
-    const auctionId = state.selectedAuctionId;
-    if (!auctionId) return;
-    const reason = prompt("Enter refund reason:");
-    if (!reason) return;
-    try {
-        await api(`/api/auctions/${auctionId}/refund`, {
-            method: "POST",
-            body: JSON.stringify({ reason })
-        });
-        notify("Refund request submitted!", "success");
-        await loadAuctions();
-        openDetail(auctionId);
-    } catch (err) { notify(err.message, "danger"); }
-});
-
-document.getElementById("buyNowBtn")?.addEventListener('click', async () => {
-    const auctionId = state.selectedAuctionId;
-    if (!auctionId) return;
-    if (!confirm("Buy this item now at the listed price?")) return;
-    try {
-        const result = await api(`/api/auctions/${auctionId}/buy-now`, { method: "POST" });
-        if (result.orderUrl) {
-            notify("Redirecting to ZaloPay...", "info");
-            window.location.href = result.orderUrl;
-        } else {
-            notify("Buy-it-now purchase successful!", "success");
-            await loadAuctions();
-            openDetail(auctionId);
-        }
     } catch (err) { notify(err.message, "danger"); }
 });
 
@@ -984,9 +1027,16 @@ document.getElementById("auctionForm").addEventListener('submit', async e => {
     body.durationMinutes = Number(body.durationMinutes);
     body.buyItNowPrice = Number(body.buyItNowPrice || 0);
     body.reservePrice = Number(body.reservePrice || 0);
-    const scheduledInput = document.getElementById("scheduledStartTimeInput");
-    if (scheduledInput && scheduledInput.value) {
-        body.scheduledStartTime = new Date(scheduledInput.value).getTime();
+    if (!body.extraInfo) delete body.extraInfo;
+    const rawScheduledStartTime = body.scheduledStartTime;
+    delete body.scheduledStartTime;
+    if (rawScheduledStartTime) {
+        const scheduledStartTime = new Date(rawScheduledStartTime).getTime();
+        if (!Number.isFinite(scheduledStartTime)) {
+            notify("Invalid scheduled start time", "danger");
+            return;
+        }
+        body.scheduledStartTime = scheduledStartTime;
     }
     const fileInput = document.getElementById("imageInput");
     if (fileInput && fileInput.files.length > 0) {
@@ -1024,29 +1074,6 @@ document.getElementById("auctionForm").addEventListener('submit', async e => {
         switchView('dashboard');
     } catch (err) { notify(err.message, "danger"); }
 });
-            body.imageFilename = uploadResult.filename;
-        } catch (err) {
-            notify("Image upload failed: " + err.message, "danger");
-            return;
-        }
-    }
-    try {
-        let endpoint = "/api/auctions";
-        let method = "POST";
-        if (state.editingAuctionId) {
-            endpoint = `/api/auctions/${state.editingAuctionId}`;
-            method = "PUT";
-        }
-        await api(endpoint, { method: method, body: JSON.stringify(body) });
-        notify(state.editingAuctionId ? "Auction updated successfully!" : "Auction created successfully!", "success");
-        state.editingAuctionId = null;
-        document.getElementById("auctionFormTitle").textContent = "Create New Auction";
-        document.getElementById("submitAuctionBtn").textContent = "Create Auction";
-        e.target.reset();
-        await loadAuctions();
-        switchView('dashboard');
-    } catch (err) { notify(err.message, "danger"); }
-});
 
 document.getElementById("passwordForm")?.addEventListener('submit', async e => {
     e.preventDefault();
@@ -1059,6 +1086,20 @@ document.getElementById("passwordForm")?.addEventListener('submit', async e => {
         notify("Password updated successfully!", "success");
         e.target.reset();
     } catch (err) { notify(err.message, "danger"); }
+});
+
+document.getElementById("emailForm")?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    try {
+        await api("/api/account/email", {
+            method: "PUT",
+            body: JSON.stringify(Object.fromEntries(formData.entries()))
+        });
+        notify("Verification email sent.", "success");
+    } catch (err) {
+        notify(err.message, "danger");
+    }
 });
 
 document.getElementById("deleteAccountBtn")?.addEventListener('click', async () => {
@@ -1088,6 +1129,10 @@ document.getElementById("confirm2faBtn")?.addEventListener('click', async () => 
     if (!code || code.length !== 6) { notify("Enter a valid 6-digit code", "danger"); return; }
     try {
         await api("/api/account/2fa/enable", { method: "POST", body: JSON.stringify({ code }) });
+        if (state.session) {
+            state.session.twoFaEnabled = true;
+            saveSession(state.session);
+        }
         notify("2FA enabled!", "success");
         document.getElementById("twoFaSetup").classList.add("hidden");
         renderAccount();
@@ -1099,6 +1144,10 @@ document.getElementById("disable2faBtn")?.addEventListener('click', async () => 
     if (!code) return;
     try {
         await api("/api/account/2fa/disable", { method: "POST", body: JSON.stringify({ code }) });
+        if (state.session) {
+            state.session.twoFaEnabled = false;
+            saveSession(state.session);
+        }
         notify("2FA disabled", "info");
         renderAccount();
     } catch (err) { notify(err.message, "danger"); }
@@ -1142,7 +1191,7 @@ document.addEventListener('click', (e) => {
 
 function initWebSocket() {
     let reloadTimeout = null;
-    const ws = new WebSocket(`ws://${window.location.hostname}:8889`);
+    const ws = new WebSocket(resolveWebSocketUrl());
     ws.onopen = () => {
         if (state.token) ws.send("AUTH:" + state.token);
         console.log("Connected to auction updates");
@@ -1162,7 +1211,8 @@ function initWebSocket() {
 }
 
 async function loadAuctions() {
-    state.auctions = await api("/api/auctions");
+    const result = await api("/api/auctions");
+    state.auctions = Array.isArray(result) ? result : (result.auctions || result.items || []);
     if (state.session?.role === "ADMIN") {
         state.users = await api("/api/users");
     }
@@ -1186,10 +1236,15 @@ async function deleteUser(username) {
 async function updateLimit(username) {
     const limit = prompt("Enter new auction limit:", "5");
     if (limit === null) return;
+    const parsedLimit = Number.parseInt(limit, 10);
+    if (!Number.isInteger(parsedLimit) || parsedLimit < 0) {
+        notify("Enter a valid non-negative auction limit", "danger");
+        return;
+    }
     try {
         state.users = await api(`/api/users/${encodeURIComponent(username)}/auction-limit`, {
             method: "PUT",
-            body: JSON.stringify({ limit: parseInt(limit) })
+            body: JSON.stringify({ limit: parsedLimit })
         });
         notify("Limit updated", "success");
         renderAdminDashboard();
@@ -1198,7 +1253,9 @@ async function updateLimit(username) {
 
 async function init() {
     renderNav();
+    await fetchRuntimeConfig();
     initWebSocket();
+    await handleActionLinks();
     if (state.session && state.session.token) {
         try {
             const csrfResp = await api("/api/csrf");
@@ -1229,6 +1286,58 @@ async function init() {
             countdownInterval = setInterval(updateCountdown, 1000);
         }
     };
+}
+
+async function fetchRuntimeConfig() {
+    try {
+        state.runtimeConfig = await api("/api/config");
+    } catch (_) {
+        state.runtimeConfig = { wsPort: null };
+    }
+}
+
+function resolveWebSocketUrl() {
+    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const configuredPort = Number(state.runtimeConfig?.wsPort || 0);
+    const defaultPort = wsProtocol === "wss:" ? 443 : 80;
+    const currentPort = window.location.port ? Number(window.location.port) : defaultPort;
+    const host = configuredPort && configuredPort !== currentPort
+        ? `${window.location.hostname}:${configuredPort}`
+        : window.location.host;
+    return `${wsProtocol}//${host}`;
+}
+
+async function handleActionLinks() {
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get("action");
+    const token = params.get("token");
+    if (!action || !token) return;
+
+    try {
+        if (action === "verify-email") {
+            const session = await api("/api/account/verify-email", {
+                method: "POST",
+                body: JSON.stringify({ token })
+            });
+            saveSession(session);
+            renderNav();
+            notify("Email verified successfully.", "success");
+        } else if (action === "reset-password") {
+            const password = prompt("Enter a new password for your account:");
+            if (!password) return;
+            const session = await api("/api/password-reset/confirm", {
+                method: "POST",
+                body: JSON.stringify({ token, newPassword: password })
+            });
+            saveSession(session);
+            renderNav();
+            notify("Password reset successfully.", "success");
+        }
+    } catch (err) {
+        notify(err.message, "danger");
+    } finally {
+        history.replaceState({}, document.title, window.location.pathname);
+    }
 }
 
 init();

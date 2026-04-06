@@ -27,12 +27,12 @@ public class HealthHandler implements HttpHandler {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
-        exchange.getResponseHeaders().set("X-Frame-Options", "DENY");
+        HttpUtil.addSecurityHeaders(exchange);
         String path = exchange.getRequestURI().getPath();
         if ("/api/health".equals(path)) handleHealth(exchange);
         else if ("/api/health/live".equals(path)) handleLiveness(exchange);
         else if ("/api/health/ready".equals(path)) handleReadiness(exchange);
+        else if ("/api/metrics".equals(path)) handleMetrics(exchange);
         else exchange.sendResponseHeaders(404, -1);
     }
 

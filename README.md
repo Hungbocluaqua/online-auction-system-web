@@ -33,7 +33,11 @@ Open **http://localhost:8080** in your browser.
 
 ## Default Accounts
 
-Seed passwords are randomly generated on first start for security. Check server logs for initial credentials.
+The bootstrap `admin` password is generated on first start unless `ADMIN_PASSWORD` is set. Check server logs for the generated credential.
+
+Development seed users:
+- `seller1` / `TestP@ss1!`
+- `bidder1` / `TestP@ss2!`
 
 ## Features
 
@@ -165,9 +169,11 @@ nginx/
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DB_URL` | PostgreSQL JDBC URL | `jdbc:h2:file:./data/auction-db` (H2 fallback) |
-| `DB_USER` | Database username | `sa` |
-| `DB_PASSWORD` | Database password | |
+| `DATABASE_URL` / `DB_URL` | PostgreSQL JDBC URL | `jdbc:h2:file:./data/auction-db` (H2 fallback) |
+| `DATABASE_USER` / `DB_USER` | Database username | `sa` |
+| `DATABASE_PASSWORD` / `DB_PASSWORD` | Database password | |
+| `HTTP_PORT` | HTTP server port | `8080` |
+| `WS_PORT` | WebSocket server port | `8889` |
 | `SENDGRID_API_KEY` | SendGrid API key | (stub mode — logs to console) |
 | `EMAIL_FROM` | From email address | `noreply@auctionsystem.com` |
 | `EMAIL_FROM_NAME` | From name | `Auction System` |
@@ -176,6 +182,8 @@ nginx/
 | `ZALOPAY_KEY2` | ZaloPay HMAC key for verifying IPN callbacks | |
 | `ZALOPAY_PRODUCTION` | Use production ZaloPay API (`true`/`false`) | `false` (sandbox) |
 | `BASE_URL` | Application base URL for callbacks | `http://localhost:8080` |
+| `CORS_ORIGIN` | Allowed browser origin | derived from `BASE_URL` |
+| `ADMIN_PASSWORD` | Explicit bootstrap admin password | generated on first start |
 | `APP_ENV` | Environment | `development` |
 
 ### application.properties

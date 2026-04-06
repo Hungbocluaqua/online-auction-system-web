@@ -1,18 +1,20 @@
 package com.auction.web.service;
 
 import com.auction.web.Logger;
+import com.auction.web.http.HttpUtil;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.LinkedHashMap;
 
 public class StripeService {
     private final String secretKey;
     private final String webhookSecret;
-    private final HttpClient client = HttpClient.newHttpClient();
+    private final HttpClient client = HttpUtil.sharedClient();
 
     public StripeService(String secretKey, String webhookSecret) {
         this.secretKey = secretKey;
@@ -33,7 +35,7 @@ public class StripeService {
             return stub;
         }
         try {
-            String body = "amount=" + amountCents + "&currency=" + currency + "&description=" + java.net.URLEncoder.encode(description, java.nio.charset.StandardCharsets.UTF_8);
+            String body = "amount=" + amountCents + "&currency=" + currency + "&description=" + java.net.URLEncoder.encode(description, StandardCharsets.UTF_8);
             HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("https://api.stripe.com/v1/payment_intents"))
                 .header("Authorization", "Bearer " + secretKey)
@@ -83,9 +85,7 @@ public class StripeService {
         if (!isConfigured()) return true;
         if (webhookSecret == null || webhookSecret.isBlank()) return false;
         try {
-            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
-            mac.init(new javax.crypto.spec.SecretKeySpec(webhookSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8), "HmacSHA256"));
-            byte[] hash = mac.doFinal(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            byte[] hash = HttpUtil.hmacSha256Raw(webhookSecret, payload);
             String expectedSig = java.util.Base64.getEncoder().encodeToString(hash);
             return sigHeader.contains(expectedSig);
         } catch (Exception e) {
@@ -94,17 +94,16 @@ public class StripeService {
     }
 
     private Map<String, Object> parseStripeResponse(String json) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        try {
-            com.google.gson.Gson gson = new com.google.gson.Gson();
-            @SuppressWarnings("unchecked")
-            Map<String, Object> parsed = gson.fromJson(json, Map.class);
-            result.put("id", parsed.get("id"));
-            result.put("client_secret", parsed.get("client_secret"));
-            result.put("status", parsed.get("status"));
-        } catch (Exception e) {
+        Map<String, Object> parsed = HttpUtil.parseJsonToMap(json);
+        if (parsed == null) {
+            Map<String, Object> result = new LinkedHashMap<>();
             result.put("error", "Failed to parse response");
+            return result;
         }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", parsed.get("id"));
+        result.put("client_secret", parsed.get("client_secret"));
+        result.put("status", parsed.get("status"));
         return result;
     }
 }

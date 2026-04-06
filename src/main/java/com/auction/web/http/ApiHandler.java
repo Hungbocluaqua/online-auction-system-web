@@ -1,5 +1,6 @@
 package com.auction.web.http;
 
+import com.auction.web.config.AppConfig;
 import com.auction.web.dto.*;
 import com.auction.web.service.AuctionService;
 import com.auction.web.service.ZaloPayService;
@@ -18,6 +19,7 @@ public class ApiHandler implements HttpHandler {
     private final AuctionService service;
     private final ZaloPayService zaloPayService;
     private final Gson gson;
+    private final AppConfig config;
     private final AuditLogger auditLogger = new AuditLogger(java.nio.file.Path.of("data", "audit.log"));
     private final RateLimiter rateLimiter = new RateLimiter();
     private final MetricsCollector metrics = MetricsCollector.getInstance();
@@ -34,16 +36,17 @@ public class ApiHandler implements HttpHandler {
         boolean isValid() { return System.currentTimeMillis() < expiresAt; }
     }
 
-    public ApiHandler(AuctionService service, ZaloPayService zaloPayService, Gson gson) {
+    public ApiHandler(AuctionService service, ZaloPayService zaloPayService, Gson gson, AppConfig config) {
         this.service = service;
         this.zaloPayService = zaloPayService;
         this.gson = gson;
+        this.config = config != null ? config : AppConfig.load();
     }
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         addCors(exchange);
-        addSecurityHeaders(exchange);
+        HttpUtil.addSecurityHeaders(exchange);
         String method = exchange.getRequestMethod();
         if ("OPTIONS".equalsIgnoreCase(method)) {
             exchange.sendResponseHeaders(204, -1);
@@ -72,11 +75,15 @@ public class ApiHandler implements HttpHandler {
                 HttpUtil.writeJson(exchange, 200, gson, ApiResponse.ok(resp));
                 return;
             }
+            if ("/api/config".equals(path) && "GET".equalsIgnoreCase(method)) {
+                HttpUtil.writeJson(exchange, 200, gson, ApiResponse.ok(Map.of("wsPort", config.getWsPort())));
+                return;
+            }
             if ("/api/login".equals(path) && "POST".equalsIgnoreCase(method)) {
                 rateLimiter.check(clientIp, 10, 600000, "Too many login attempts");
                 AuthRequest request = HttpUtil.readBody(exchange, gson, AuthRequest.class);
                 validateCaptcha(request.captchaChallengeId, request.captchaAnswer);
-                SessionView session = service.login(request.username, request.password);
+                SessionView session = service.login(request.username, request.password, request.twoFactorCode);
                 HttpUtil.setSessionCookie(exchange, session.getToken());
                 auditLogger.log("login", session.getUsername(), "success", "session", clientIp);
                 HttpUtil.writeJson(exchange, 200, gson, ApiResponse.ok(session));
@@ -173,8 +180,8 @@ public class ApiHandler implements HttpHandler {
             }
             if ("/api/watchlist".equals(path) && "POST".equalsIgnoreCase(method)) {
                 requireCsrf(exchange, token);
-                Map<String, String> body = HttpUtil.readBody(exchange, gson, Map.class);
-                String auctionId = body.get("auctionId");
+                Map<String, Object> body = HttpUtil.readBodyMap(exchange, gson);
+                String auctionId = HttpUtil.stringField(body, "auctionId");
                 if (auctionId == null || auctionId.isBlank()) { HttpUtil.writeJson(exchange, 400, gson, ApiResponse.error("auctionId is required")); return; }
                 String result = service.addToWatchlist(token, auctionId);
                 HttpUtil.writeJson(exchange, 200, gson, ApiResponse.ok(result));
@@ -203,8 +210,8 @@ public class ApiHandler implements HttpHandler {
             }
             if ("/api/account/2fa/enable".equals(path) && "POST".equalsIgnoreCase(method)) {
                 requireCsrf(exchange, token);
-                Map<String, String> body = HttpUtil.readBody(exchange, gson, Map.class);
-                String code = body.get("code");
+                Map<String, Object> body = HttpUtil.readBodyMap(exchange, gson);
+                String code = HttpUtil.stringField(body, "code");
                 if (code == null || code.isBlank()) { HttpUtil.writeJson(exchange, 400, gson, ApiResponse.error("TOTP code is required")); return; }
                 String result = service.enable2FA(token, code);
                 HttpUtil.writeJson(exchange, 200, gson, ApiResponse.ok(result));
@@ -212,8 +219,8 @@ public class ApiHandler implements HttpHandler {
             }
             if ("/api/account/2fa/disable".equals(path) && "POST".equalsIgnoreCase(method)) {
                 requireCsrf(exchange, token);
-                Map<String, String> body = HttpUtil.readBody(exchange, gson, Map.class);
-                String code = body.get("code");
+                Map<String, Object> body = HttpUtil.readBodyMap(exchange, gson);
+                String code = HttpUtil.stringField(body, "code");
                 if (code == null || code.isBlank()) { HttpUtil.writeJson(exchange, 400, gson, ApiResponse.error("TOTP code is required")); return; }
                 String result = service.disable2FA(token, code);
                 HttpUtil.writeJson(exchange, 200, gson, ApiResponse.ok(result));
@@ -295,9 +302,9 @@ public class ApiHandler implements HttpHandler {
             if (path.startsWith("/api/auctions/")) { handleAuctionSubroute(exchange, path, method, token, clientIp); return; }
             if (path.startsWith("/api/admin/")) { handleAdminSubroute(exchange, path, method, token, clientIp); return; }
             if ("/api/zalopay/callback".equals(path) && "POST".equalsIgnoreCase(method)) {
-                Map<String, String> body = HttpUtil.readBody(exchange, gson, Map.class);
-                String data = body.get("data");
-                String mac = body.get("mac");
+                Map<String, Object> body = HttpUtil.readBodyMap(exchange, gson);
+                String data = HttpUtil.stringField(body, "data");
+                String mac = HttpUtil.stringField(body, "mac");
                 if (data == null || mac == null) { HttpUtil.writeJson(exchange, 400, gson, ApiResponse.error("Missing data or mac")); return; }
                 if (!zaloPayService.verifyCallback(data, mac)) { HttpUtil.writeJson(exchange, 403, gson, ApiResponse.error("Invalid MAC signature")); return; }
                 com.google.gson.JsonObject json = gson.fromJson(data, com.google.gson.JsonObject.class);
@@ -311,8 +318,8 @@ public class ApiHandler implements HttpHandler {
             }
             if ("/api/zalopay/query".equals(path) && "POST".equalsIgnoreCase(method)) {
                 requireCsrf(exchange, token);
-                Map<String, String> body = HttpUtil.readBody(exchange, gson, Map.class);
-                String paymentId = body.get("paymentId");
+                Map<String, Object> body = HttpUtil.readBodyMap(exchange, gson);
+                String paymentId = HttpUtil.stringField(body, "paymentId");
                 if (paymentId == null || paymentId.isBlank()) { HttpUtil.writeJson(exchange, 400, gson, ApiResponse.error("paymentId is required")); return; }
                 Map<String, Object> result = service.queryPaymentStatus(paymentId);
                 HttpUtil.writeJson(exchange, 200, gson, ApiResponse.ok(result));
@@ -321,18 +328,18 @@ public class ApiHandler implements HttpHandler {
 
             HttpUtil.writeJson(exchange, 404, gson, ApiResponse.error("Not found"));
         } catch (RateLimitException ex) {
-            metrics.recordRequest(429);
+            if ("/api/login".equals(path)) metrics.recordAuthFailure();
             HttpUtil.writeJson(exchange, 429, gson, ApiResponse.error(ex.getMessage()));
         } catch (SecurityException ex) {
-            metrics.recordRequest(401);
+            if ("/api/login".equals(path)) metrics.recordAuthFailure();
             auditLogger.log("request_denied", safeUsername(HttpUtil.authToken(exchange)), "denied", exchange.getRequestURI().getPath(), ex.getMessage());
             HttpUtil.writeJson(exchange, 401, gson, ApiResponse.error(ex.getMessage()));
         } catch (IllegalArgumentException | IllegalStateException ex) {
-            metrics.recordRequest(400);
+            if ("/api/login".equals(path) && !"2FA_REQUIRED".equals(ex.getMessage())) metrics.recordAuthFailure();
             HttpUtil.writeJson(exchange, 400, gson, ApiResponse.error(ex.getMessage()));
         } catch (Exception ex) {
             metrics.recordError();
-            metrics.recordRequest(500);
+            if ("/api/login".equals(path)) metrics.recordAuthFailure();
             com.auction.web.Logger.error("Unhandled exception in API handler", ex);
             HttpUtil.writeJson(exchange, 500, gson, ApiResponse.error("Internal server error"));
         }
@@ -427,8 +434,8 @@ public class ApiHandler implements HttpHandler {
         }
         if (parts.length == 2 && "refund".equals(parts[1]) && "POST".equalsIgnoreCase(method)) {
             requireCsrf(exchange, token);
-            Map<String, String> body = HttpUtil.readBody(exchange, gson, Map.class);
-            String reason = body.get("reason");
+            Map<String, Object> body = HttpUtil.readBodyMap(exchange, gson);
+            String reason = HttpUtil.stringField(body, "reason");
             Map<String, Object> result = service.requestRefund(token, auctionId, reason);
             auditLogger.log("refund_request", safeUsername(token), "success", auctionId, "");
             HttpUtil.writeJson(exchange, 200, gson, new ApiResponse(true, null, result));
@@ -436,8 +443,8 @@ public class ApiHandler implements HttpHandler {
         }
         if (parts.length == 2 && "schedule".equals(parts[1]) && "POST".equalsIgnoreCase(method)) {
             requireCsrf(exchange, token);
-            Map<String, String> body = HttpUtil.readBody(exchange, gson, Map.class);
-            long scheduledTime = Long.parseLong(body.get("scheduledStartTime"));
+            Map<String, Object> body = HttpUtil.readBodyMap(exchange, gson);
+            long scheduledTime = HttpUtil.requireLongField(body, "scheduledStartTime");
             AuctionView auction = service.scheduleAuction(token, auctionId, scheduledTime);
             auditLogger.log("auction_schedule", safeUsername(token), "success", auctionId, "");
             HttpUtil.writeJson(exchange, 200, gson, ApiResponse.ok(auction));
@@ -490,8 +497,8 @@ public class ApiHandler implements HttpHandler {
         }
         if (parts.length == 2 && "refunds".equals(parts[0]) && "PUT".equalsIgnoreCase(method)) {
             requireCsrf(exchange, token);
-            Map<String, String> body = HttpUtil.readBody(exchange, gson, Map.class);
-            String action = body.get("action");
+            Map<String, Object> body = HttpUtil.readBodyMap(exchange, gson);
+            String action = HttpUtil.stringField(body, "action");
             String result = service.processRefund(token, parts[1], action);
             auditLogger.log("refund_process", safeUsername(token), "success", parts[1], action);
             HttpUtil.writeJson(exchange, 200, gson, ApiResponse.ok(result));
@@ -513,18 +520,10 @@ public class ApiHandler implements HttpHandler {
     }
 
     private void addCors(HttpExchange exchange) {
-        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "http://localhost:8080");
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", config.getCorsOrigin());
         exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-CSRF-Token");
         exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
         exchange.getResponseHeaders().set("Access-Control-Allow-Credentials", "true");
-    }
-
-    private void addSecurityHeaders(HttpExchange exchange) {
-        exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
-        exchange.getResponseHeaders().set("X-Frame-Options", "DENY");
-        exchange.getResponseHeaders().set("X-XSS-Protection", "1; mode=block");
-        exchange.getResponseHeaders().set("Referrer-Policy", "strict-origin-when-cross-origin");
-        exchange.getResponseHeaders().set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
     }
 
     private String safeUsername(String token) {
@@ -537,8 +536,7 @@ public class ApiHandler implements HttpHandler {
     }
 
     private void requireRole(String token, com.auction.web.model.User.Role role) {
-        com.auction.web.model.User user = service.requireUser(token);
-        if (user.getRole() != role) throw new SecurityException("Unauthorized");
+        service.requireRole(token, role);
     }
 
     private void validateCaptcha(String challengeId, Integer answer) {

@@ -32,22 +32,15 @@ public class User extends Entity {
     }
 
     public static User fromStoredHash(String id, String username, String passwordHash, Role role) {
-        User user = new User(id, username, "", role);
-        user.passwordHash = passwordHash;
-        return user;
+        return fromStoredHash(id, username, passwordHash, role, null, null, null, false, 0, 0, null, false);
     }
 
     public static User fromStoredHash(String id, String username, String passwordHash, Role role, Integer auctionLimit) {
-        return fromStoredHash(id, username, passwordHash, role, auctionLimit, null);
+        return fromStoredHash(id, username, passwordHash, role, auctionLimit, null, null, false, 0, 0, null, false);
     }
 
     public static User fromStoredHash(String id, String username, String passwordHash, Role role, Integer auctionLimit, Long createdAt) {
-        Role normalizedRole = role == Role.ADMIN ? Role.ADMIN : Role.USER;
-        User user = new User(id, username, "", normalizedRole);
-        user.passwordHash = passwordHash;
-        user.auctionLimit = auctionLimit == null ? defaultAuctionLimit(normalizedRole) : auctionLimit;
-        user.createdAt = createdAt == null ? System.currentTimeMillis() : createdAt;
-        return user;
+        return fromStoredHash(id, username, passwordHash, role, auctionLimit, createdAt, null, false, 0, 0, null, false);
     }
 
     public static User fromStoredHash(String id, String username, String passwordHash, Role role, Integer auctionLimit, Long createdAt,

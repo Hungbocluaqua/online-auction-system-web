@@ -1,18 +1,18 @@
 package com.auction.web.service;
 
 import com.auction.web.Logger;
+import com.auction.web.http.HttpUtil;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.Base64;
 
 public class EmailService {
     private final String apiKey;
     private final String fromEmail;
     private final String fromName;
-    private final HttpClient client = HttpClient.newHttpClient();
+    private final HttpClient client = HttpUtil.sharedClient();
 
     public EmailService(String apiKey, String fromEmail, String fromName) {
         this.apiKey = apiKey;
@@ -73,7 +73,7 @@ public class EmailService {
     }
 
     private String escapeJson(String s) {
-        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\n");
+        return HttpUtil.escapeJson(s);
     }
 
     private String escapeHtml(String s) {

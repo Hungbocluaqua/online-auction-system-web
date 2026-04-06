@@ -12,7 +12,10 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.nio.ByteBuffer;
 import java.util.UUID;
+import java.util.Arrays;
+import java.util.Locale;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class SecurityFeaturesTest {
@@ -152,8 +155,8 @@ class SecurityFeaturesTest {
     void emailVerificationFlow() {
         SessionView session = service.register("emailuser", TEST_PASS, "USER");
         String result = service.requestEmailVerification(session.getToken(), "test@example.com");
-        assertTrue(result.contains("Token:"));
-        String token = result.substring(result.indexOf("Token: ") + 7);
+        assertEquals("Verification email sent", result);
+        String token = getVerificationTokenFromDb("emailuser");
         SessionView verified = service.confirmEmailVerification(token);
         assertNotNull(verified);
     }
@@ -242,6 +245,28 @@ class SecurityFeaturesTest {
             service.updateAuctionLimit(user.getToken(), "someuser", 10));
     }
 
+    @Test
+    @Order(21)
+    void twoFactorLoginRequiresValidSecondStep() {
+        SessionView session = service.register("twofauser", TEST_PASS, "USER");
+        var setup = service.setup2FA(session.getToken());
+        String secret = (String) setup.get("secret");
+        assertNotNull(secret);
+
+        String code = generateCurrentTotp(secret);
+        assertEquals("2FA enabled", service.enable2FA(session.getToken(), code));
+
+        IllegalStateException required = assertThrows(IllegalStateException.class, () ->
+            service.login("twofauser", TEST_PASS));
+        assertEquals("2FA_REQUIRED", required.getMessage());
+
+        assertThrows(IllegalArgumentException.class, () ->
+            service.login("twofauser", TEST_PASS, "000000"));
+
+        SessionView authenticated = service.login("twofauser", TEST_PASS, generateCurrentTotp(secret));
+        assertTrue(authenticated.isTwoFaEnabled());
+    }
+
     private String getResetTokenFromDb(String username) {
         try (Connection conn = service.getDbManager().getConnection();
              PreparedStatement ps = conn.prepareStatement("SELECT token FROM password_reset_tokens WHERE username = ? AND used = FALSE ORDER BY expires_at DESC")) {
@@ -252,5 +277,61 @@ class SecurityFeaturesTest {
             throw new RuntimeException("Failed to get reset token", e);
         }
         return null;
+    }
+
+    private String getVerificationTokenFromDb(String username) {
+        try (Connection conn = service.getDbManager().getConnection();
+             PreparedStatement ps = conn.prepareStatement("SELECT token FROM verification_tokens WHERE username = ? AND used = FALSE ORDER BY expires_at DESC")) {
+            ps.setString(1, username);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) return rs.getString("token");
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to get verification token", e);
+        }
+        return null;
+    }
+
+    private String generateCurrentTotp(String secret) {
+        long timeCounter = (System.currentTimeMillis() / 1000) / 30;
+        return generateTotp(secret, timeCounter);
+    }
+
+    private String generateTotp(String secret, long timeCounter) {
+        try {
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA1");
+            mac.init(new javax.crypto.spec.SecretKeySpec(decodeBase32(secret), "HmacSHA1"));
+            byte[] timeBytes = ByteBuffer.allocate(8).putLong(timeCounter).array();
+            byte[] hash = mac.doFinal(timeBytes);
+            int offset = hash[hash.length - 1] & 0xF;
+            int binary = ((hash[offset] & 0x7F) << 24)
+                | ((hash[offset + 1] & 0xFF) << 16)
+                | ((hash[offset + 2] & 0xFF) << 8)
+                | (hash[offset + 3] & 0xFF);
+            return String.format("%06d", binary % 1000000);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to generate TOTP", e);
+        }
+    }
+
+    private byte[] decodeBase32(String secret) {
+        String normalized = secret == null ? "" : secret.replace("=", "").replace(" ", "").toUpperCase(Locale.ROOT);
+        byte[] output = new byte[(normalized.length() * 5) / 8];
+        int buffer = 0;
+        int bitsLeft = 0;
+        int index = 0;
+        for (int i = 0; i < normalized.length(); i++) {
+            char c = normalized.charAt(i);
+            int value;
+            if (c >= 'A' && c <= 'Z') value = c - 'A';
+            else if (c >= '2' && c <= '7') value = 26 + (c - '2');
+            else throw new IllegalArgumentException("Invalid base32 secret");
+            buffer = (buffer << 5) | value;
+            bitsLeft += 5;
+            if (bitsLeft >= 8) {
+                output[index++] = (byte) ((buffer >> (bitsLeft - 8)) & 0xFF);
+                bitsLeft -= 8;
+            }
+        }
+        return index == output.length ? output : Arrays.copyOf(output, index);
     }
 }

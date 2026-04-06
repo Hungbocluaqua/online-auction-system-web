@@ -12,7 +12,7 @@ import java.nio.file.Files;
 public class StaticFileHandler implements HttpHandler {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        addSecurityHeaders(exchange);
+        HttpUtil.addSecurityHeaders(exchange);
         String path = exchange.getRequestURI().getPath();
         
         // Serve from uploads directory
@@ -59,14 +59,6 @@ public class StaticFileHandler implements HttpHandler {
             exchange.getResponseHeaders().set("Cache-Control", "no-cache, no-store, must-revalidate");
             HttpUtil.writeBytes(exchange, 200, contentType(path), body);
         }
-    }
-
-    private void addSecurityHeaders(HttpExchange exchange) {
-        exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
-        exchange.getResponseHeaders().set("X-Frame-Options", "DENY");
-        exchange.getResponseHeaders().set("X-XSS-Protection", "1; mode=block");
-        exchange.getResponseHeaders().set("Referrer-Policy", "strict-origin-when-cross-origin");
-        exchange.getResponseHeaders().set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
     }
 
     private String contentType(String path) {

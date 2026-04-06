@@ -89,8 +89,20 @@
                             <label>Password</label>
                             <input type="password" name="password" placeholder="Password" required>
                         </div>
+                        <div class="form-group hidden" id="loginTwoFaGroup">
+                            <label>Two-Factor Code</label>
+                            <input type="text" name="twoFactorCode" id="loginTwoFaCode" placeholder="123456" maxlength="6" inputmode="numeric">
+                        </div>
+                        <div class="form-group" id="captchaGroup">
+                            <label id="captchaLabel">What is 5 + 3 - 2?</label>
+                            <input type="text" id="captchaAnswer" placeholder="Enter answer" required>
+                        </div>
+                        <input type="hidden" id="captchaChallengeId">
                         <button type="submit" class="btn-primary btn-full" id="authSubmit">Sign In</button>
                     </form>
+                    <p class="auth-toggle">
+                        <a href="#" id="forgotPasswordLink">Forgot password?</a>
+                    </p>
                     <p class="auth-toggle">
                         <span id="authToggleText">Don't have an account?</span>
                         <a href="#" id="authToggleLink">Sign up</a>
@@ -241,13 +253,18 @@
 
         <section id="categoriesView" class="view hidden">
             <div class="container">
-                <div class="view-header">
-                    <div>
-                        <h1>Categories</h1>
-                        <p class="subtle">Browse auctions by category</p>
+                <div class="categories-shell">
+                    <div class="categories-hero">
+                        <div>
+                            <p class="eyebrow">Marketplace Map</p>
+                            <h1>Categories</h1>
+                            <p class="subtle" id="categoriesSummary">Browse auctions by category</p>
+                        </div>
+                        <button class="btn-secondary" id="browseAllCategoriesBtn" type="button">Browse all auctions</button>
                     </div>
+                    <div id="categoriesHighlights" class="category-highlights"></div>
+                    <div id="categoriesGrid" class="categories-grid"></div>
                 </div>
-                <div id="categoriesGrid" class="categories-grid"></div>
             </div>
         </section>
 
@@ -376,6 +393,18 @@
                 </div>
 
                 <div class="detail-section" style="margin-bottom: 2rem;">
+                    <h3>Email Verification</h3>
+                    <p class="subtle">Add or update your email to receive verification and password reset links.</p>
+                    <form id="emailForm">
+                        <div class="form-group">
+                            <label>Email Address</label>
+                            <input type="email" name="email" id="emailInput" placeholder="name@example.com" required>
+                        </div>
+                        <button type="submit" class="btn-primary">Send Verification Email</button>
+                    </form>
+                </div>
+
+                <div class="detail-section" style="margin-bottom: 2rem;">
                     <h3>Two-Factor Authentication</h3>
                     <p class="subtle" id="twoFaStatus">2FA is not enabled</p>
                     <div style="margin-top:1rem;">
@@ -428,64 +457,6 @@
                 </div>
                 <div id="notificationsList" class="notifications-list"></div>
                 <p class="subtle" id="notificationsEmpty" style="text-align:center; padding:3rem 0;">No notifications yet.</p>
-            </div>
-        </section>
-
-        <section id="adminRefundsView" class="view hidden">
-            <div class="container">
-                <div class="view-header">
-                    <div>
-                        <h1>Refund Requests</h1>
-                        <p class="subtle">Review and process user refund requests</p>
-                    </div>
-                </div>
-                <div class="table-wrap">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Refund ID</th>
-                                <th>Auction</th>
-                                <th>User</th>
-                                <th>Amount</th>
-                                <th>Reason</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="refundsTableBody">
-                        </tbody>
-                    </table>
-                </div>
-                <p class="subtle" id="refundsEmpty" style="text-align:center; padding:3rem 0;">No refund requests yet.</p>
-            </div>
-        </section>
-
-        <section id="adminRefundsView" class="view hidden">
-            <div class="container">
-                <div class="view-header">
-                    <div>
-                        <h1>Refund Requests</h1>
-                        <p class="subtle">Review and process user refund requests</p>
-                    </div>
-                </div>
-                <div class="table-wrap">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Refund ID</th>
-                                <th>Auction</th>
-                                <th>User</th>
-                                <th>Amount</th>
-                                <th>Reason</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="refundsTableBody">
-                        </tbody>
-                    </table>
-                </div>
-                <p class="subtle" id="refundsEmpty" style="text-align:center; padding:3rem 0;">No refund requests yet.</p>
             </div>
         </section>
 
@@ -635,21 +606,11 @@
                                 <button id="buyNowBtn" class="btn-primary btn-full" type="button" style="background: var(--success); box-shadow: 0 10px 24px rgb(36 199 138 / 0.28);">Buy It Now — <span id="buyNowPriceLabel"></span></button>
                             </div>
 
-                            <div id="buyNowSection" class="hidden" style="margin-top:1rem;">
-                                <button id="buyNowBtn" class="btn-primary btn-full" type="button" style="background: var(--success); box-shadow: 0 10px 24px rgb(36 199 138 / 0.28);">Buy It Now — <span id="buyNowPriceLabel"></span></button>
-                            </div>
-
                             <div id="paymentSection" class="hidden" style="margin-top:1rem;">
                                 <p class="subtle eyebrow">PAYMENT</p>
                                 <p class="subtle" id="paymentStatusText" style="margin-bottom:0.5rem;"></p>
                                 <button id="payNowBtn" class="btn-primary btn-full hidden" type="button">Pay with ZaloPay</button>
                                 <button id="markReceivedBtn" class="btn-secondary btn-full hidden" type="button">Mark as Received</button>
-                            </div>
-
-                            <div id="refundSection" class="hidden" style="margin-top:1rem;">
-                                <p class="subtle eyebrow">REFUND</p>
-                                <p class="subtle" id="refundStatusText" style="margin-bottom:0.5rem;"></p>
-                                <button id="requestRefundBtn" class="btn-secondary btn-full hidden" type="button" style="color: var(--warning); border-color: var(--warning);">Request Refund</button>
                             </div>
 
                             <div id="refundSection" class="hidden" style="margin-top:1rem;">

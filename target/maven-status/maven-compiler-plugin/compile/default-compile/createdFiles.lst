@@ -21,6 +21,7 @@ com\auction\web\WebAuctionApplication.class
 com\auction\web\dto\PasswordResetConfirmRequest.class
 com\auction\web\persistence\JsonDataStore$UserRecord.class
 com\auction\web\dto\PaymentRequest.class
+com\auction\web\config\AppConfig.class
 com\auction\web\model\Auction.class
 com\auction\web\http\RateLimiter.class
 com\auction\web\dto\ApiResponse.class

@@ -10,6 +10,7 @@ public class SessionView {
     private int auctionLimit;
     private long createdAt;
     private String csrfToken;
+    private boolean twoFaEnabled;
 
     public SessionView(String token, String userId, String username, User.Role role, int auctionLimit, long createdAt) {
         this.token = token;
@@ -26,6 +27,14 @@ public class SessionView {
 
     public String getCsrfToken() {
         return csrfToken;
+    }
+
+    public void setTwoFaEnabled(boolean twoFaEnabled) {
+        this.twoFaEnabled = twoFaEnabled;
+    }
+
+    public boolean isTwoFaEnabled() {
+        return twoFaEnabled;
     }
 
     public String getToken() {

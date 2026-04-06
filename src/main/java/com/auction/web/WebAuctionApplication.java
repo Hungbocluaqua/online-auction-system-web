@@ -1,5 +1,6 @@
 package com.auction.web;
 
+import com.auction.web.config.AppConfig;
 import com.auction.web.http.ApiHandler;
 import com.auction.web.http.HealthHandler;
 import com.auction.web.http.StaticFileHandler;
@@ -17,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 
 public class WebAuctionApplication {
     public static void main(String[] args) throws IOException {
+        AppConfig config = AppConfig.load();
         String sendgridKey = System.getenv("SENDGRID_API_KEY");
         String fromEmail = System.getenv("EMAIL_FROM");
         String fromName = System.getenv("EMAIL_FROM_NAME");
@@ -30,34 +32,34 @@ public class WebAuctionApplication {
         try { appId = zaloAppId != null && !zaloAppId.isBlank() ? Integer.parseInt(zaloAppId) : 0; } catch (NumberFormatException ignored) {}
         ZaloPayService zaloPayService = new ZaloPayService(appId, zaloKey1, zaloKey2, zaloProduction);
 
-        String pgUrl = System.getenv("DATABASE_URL");
-        String pgUser = System.getenv("DATABASE_USER");
-        String pgPass = System.getenv("DATABASE_PASSWORD");
+        String pgUrl = config.getDatabaseUrl();
+        String pgUser = config.getDatabaseUser();
+        String pgPass = config.getDatabasePassword();
 
-        boolean usePostgres = pgUrl != null && !pgUrl.isBlank();
+        boolean usePostgres = pgUrl != null && !pgUrl.isBlank() && !pgUrl.startsWith("jdbc:h2:");
         AuctionService service;
         if (usePostgres) {
             Logger.info("Using PostgreSQL database");
-            service = new AuctionService(false, pgUrl, pgUser, pgPass);
+            service = new AuctionService(false, pgUrl, pgUser, pgPass, config);
         } else {
-            Logger.warn("Using embedded H2 database - NOT suitable for production. Set DATABASE_URL to use PostgreSQL.");
-            service = new AuctionService();
+            Logger.warn("Using embedded H2 database - NOT suitable for production. Set DATABASE_URL or DB_URL to use PostgreSQL.");
+            service = new AuctionService(false, null, null, null, config);
         }
         service.setEmailService(emailService);
         service.setZaloPayService(zaloPayService);
-        String baseUrl = System.getenv("BASE_URL");
-        if (baseUrl != null && !baseUrl.isBlank()) service.setBaseUrl(baseUrl);
+        service.setBaseUrl(config.getBaseUrl());
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
         HealthHandler.setStartTime(System.currentTimeMillis());
-        ApiHandler apiHandler = new ApiHandler(service, zaloPayService, gson);
+        ApiHandler apiHandler = new ApiHandler(service, zaloPayService, gson, config);
 
-        HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
+        HttpServer server = HttpServer.create(new InetSocketAddress(config.getHttpPort()), 0);
         server.createContext("/api", apiHandler);
         server.createContext("/", new StaticFileHandler());
         server.createContext("/api/health", new HealthHandler(service.getDbManager()));
         server.createContext("/api/health/live", new HealthHandler(service.getDbManager()));
         server.createContext("/api/health/ready", new HealthHandler(service.getDbManager()));
+        server.createContext("/api/metrics", new HealthHandler(service.getDbManager()));
         ThreadPoolExecutor executor = new ThreadPoolExecutor(4, 20, 60L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(100));
         server.setExecutor(executor);
         server.start();
@@ -70,7 +72,7 @@ public class WebAuctionApplication {
             executor.shutdownNow();
         }));
 
-        Logger.info("Web auction app running at http://localhost:8080");
+        Logger.info("Web auction app running at " + config.getBaseUrl());
         if (sendgridKey == null || sendgridKey.isBlank()) {
             Logger.warn("Email service running in STUB mode - no real emails will be sent. Set SENDGRID_API_KEY to enable.");
         }

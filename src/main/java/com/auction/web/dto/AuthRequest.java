@@ -3,6 +3,7 @@ package com.auction.web.dto;
 public class AuthRequest {
     public String username;
     public String password;
+    public String twoFactorCode;
     public String captchaChallengeId;
     public Integer captchaAnswer;
 }
