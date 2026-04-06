@@ -3,6 +3,7 @@ package com.auction.web.service;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.auction.web.dto.AuctionCreateRequest;
+import com.auction.web.dto.AuctionUpdateRequest;
 import com.auction.web.dto.AuctionView;
 import com.auction.web.dto.SessionView;
 import org.junit.jupiter.api.*;
@@ -138,5 +139,86 @@ class AuctionServiceIntegrationTest {
         assertEquals("Account deleted", result);
 
         assertThrows(SecurityException.class, () -> service.requireUser(session.getToken()));
+    }
+
+    @Test
+    @Order(11)
+    void createAuctionRejectsExcessivePrice() {
+        SessionView seller = service.register("pricecapseller", TEST_PASS, "USER");
+        AuctionCreateRequest req = new AuctionCreateRequest();
+        req.itemType = "ELECTRONICS";
+        req.name = "Too Expensive";
+        req.description = "Test";
+        req.startingPrice = 1_000_000_000_001d;
+        req.durationMinutes = 60;
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+            service.createAuction(seller.getToken(), req));
+        assertTrue(ex.getMessage().contains("must not exceed"));
+    }
+
+    @Test
+    @Order(12)
+    void updateAuctionPersistsBuyNowAndReservePrices() {
+        SessionView seller = service.register("updateseller", TEST_PASS, "USER");
+        AuctionCreateRequest create = new AuctionCreateRequest();
+        create.itemType = "ELECTRONICS";
+        create.name = "Update Target";
+        create.description = "Original";
+        create.startingPrice = 100;
+        create.durationMinutes = 60;
+
+        AuctionView created = service.createAuction(seller.getToken(), create);
+
+        AuctionUpdateRequest update = new AuctionUpdateRequest();
+        update.itemType = "ELECTRONICS";
+        update.name = "Updated Target";
+        update.description = "Updated";
+        update.startingPrice = 150;
+        update.buyItNowPrice = 250;
+        update.reservePrice = 200;
+        update.durationMinutes = 120;
+        update.currency = "USD";
+
+        AuctionView updated = service.updateAuction(seller.getToken(), created.getId(), update);
+        assertEquals(250, updated.getBuyItNowPrice());
+        assertEquals(200, updated.getReservePrice());
+        assertEquals(150, updated.getStartingPrice());
+    }
+
+    @Test
+    @Order(13)
+    void ownerCanDeleteAuction() {
+        SessionView seller = service.register("deleteowner", TEST_PASS, "USER");
+        AuctionCreateRequest req = new AuctionCreateRequest();
+        req.itemType = "ELECTRONICS";
+        req.name = "Delete Me";
+        req.description = "Test";
+        req.startingPrice = 75;
+        req.durationMinutes = 60;
+
+        AuctionView auction = service.createAuction(seller.getToken(), req);
+        service.deleteAuction(seller.getToken(), auction.getId());
+
+        assertThrows(IllegalArgumentException.class, () -> service.getAuction(auction.getId()));
+    }
+
+    @Test
+    @Order(14)
+    void adminCanDeleteAnotherUsersAuction() {
+        SessionView seller = service.register("deleteotherseller", TEST_PASS, "USER");
+        SessionView admin = service.register("deleteadmin", TEST_PASS, "ADMIN");
+
+        AuctionCreateRequest req = new AuctionCreateRequest();
+        req.itemType = "ELECTRONICS";
+        req.name = "Admin Delete";
+        req.description = "Test";
+        req.startingPrice = 90;
+        req.durationMinutes = 60;
+
+        AuctionView auction = service.createAuction(seller.getToken(), req);
+        service.deleteAuction(admin.getToken(), auction.getId());
+
+        assertThrows(IllegalArgumentException.class, () -> service.getAuction(auction.getId()));
     }
 }

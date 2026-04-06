@@ -4,45 +4,54 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Online Auction</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+    <div class="page-glow page-glow-one"></div>
+    <div class="page-glow page-glow-two"></div>
+
     <nav class="navbar">
         <div class="nav-container">
             <div class="nav-left" id="goHome">
                 <div class="logo-icon">A</div>
-                <span class="logo-text">Online Auction</span>
+                <div class="logo-lockup">
+                    <span class="logo-text">Orbit Auctions</span>
+                    <span class="logo-subtle">Live marketplace</span>
+                </div>
             </div>
 
-                <div class="nav-center hidden" id="mainNav">
-                    <a href="#" data-view="admin" class="nav-link hidden" id="adminLink">Admin Panel</a>
-                    <a href="#" data-view="dashboard" class="nav-link">Dashboard</a>
-                    <a href="#" data-view="create" class="nav-link">Create Auction</a>
-                    <a href="#" data-view="auctions" class="nav-link">Auctions</a>
-                    <a href="#" data-view="categories" class="nav-link">Categories</a>
-                    <a href="#" data-view="my-auctions" class="nav-link hidden" id="sellerLink">My Auctions</a>
-                    <a href="#" data-view="my-bids" class="nav-link">My Bids</a>
-                    <a href="#" data-view="watchlist" class="nav-link">Watchlist</a>
-                    <a href="#" data-view="invoices" class="nav-link">Invoices</a>
-                    <a href="#" data-view="admin-refunds" class="nav-link hidden" id="adminRefundsLink">Refunds</a>
-                    <a href="#" data-view="account" class="nav-link">Account</a>
-                </div>
+            <div class="nav-center hidden" id="mainNav">
+                <a href="#" data-view="admin" class="nav-link hidden" id="adminLink">Admin</a>
+                <a href="#" data-view="dashboard" class="nav-link">Overview</a>
+                <a href="#" data-view="create" class="nav-link">Create</a>
+                <a href="#" data-view="auctions" class="nav-link">Auctions</a>
+                <a href="#" data-view="categories" class="nav-link">Categories</a>
+                <a href="#" data-view="my-auctions" class="nav-link hidden" id="sellerLink">My Listings</a>
+                <a href="#" data-view="my-bids" class="nav-link">My Bids</a>
+                <a href="#" data-view="watchlist" class="nav-link">Watchlist</a>
+                <a href="#" data-view="invoices" class="nav-link">Invoices</a>
+                <a href="#" data-view="admin-refunds" class="nav-link hidden" id="adminRefundsLink">Refunds</a>
+            </div>
 
             <div class="nav-right">
-                <div id="guestNav">
-                    <a href="#" class="nav-link">Home</a>
-                    <a href="#" class="nav-link">About</a>
-                    <a href="#" class="nav-link">Contact</a>
-                    <a href="#" class="nav-link">Legal</a>
-                    <button class="btn-secondary" id="openLogin">Log in</button>
-                    <button class="btn-primary" id="openRegister">Sign up</button>
+                <div id="guestNav" class="guest-nav">
+                    <a href="#" class="nav-link" data-view="landing">Home</a>
+                    <span class="guest-pill">Realtime bidding</span>
+                    <button class="btn-secondary" id="openLogin" type="button">Log in</button>
+                    <button class="btn-primary" id="openRegister" type="button">Sign up</button>
                 </div>
-                <div id="userNav" class="hidden">
-                    <div class="user-profile">
+                <div id="userNav" class="user-nav hidden">
+                    <button class="user-profile user-profile-btn" id="openAccountBtn" type="button" title="Open account">
                         <div class="avatar" id="userAvatar">A</div>
-                        <span id="userName">User</span>
-                    </div>
-                    <button class="icon-btn" id="notifBell" title="Notifications" type="button" style="position:relative;">
+                        <div class="user-copy">
+                            <span class="user-label">Signed in</span>
+                            <span id="userName">User</span>
+                        </div>
+                    </button>
+                    <button class="icon-btn" id="notifBell" title="Notifications" type="button">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
                         <span id="notifBadge" class="notif-badge hidden">0</span>
                     </button>
@@ -50,96 +59,170 @@
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
                     </button>
                 </div>
-                <button class="icon-btn mobile-menu-btn" id="mobileMenuBtn" type="button">
+                <button class="icon-btn mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Toggle navigation">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
                 </button>
             </div>
         </div>
     </nav>
 
-    <main id="app">
+    <main id="app" class="app-shell">
         <section id="landingView" class="view">
-            <div class="hero">
-                <div class="hero-badge">Live auctions happening now</div>
-                <h1>Bid, Win and <span class="highlight">Sell Online</span></h1>
-                <p>Discover unique items, place competitive bids, and manage your auctions from any browser.</p>
-                <div class="hero-actions">
-                    <button class="btn-primary btn-large" id="heroStart" type="button">Get Started Free</button>
-                    <button class="btn-secondary btn-large" id="heroSignIn" type="button">Sign In</button>
+            <div class="container landing-shell">
+                <div class="hero-card">
+                    <div class="hero-copy">
+                        <div class="hero-badge">Live auctions, cleaner workflows, instant updates</div>
+                        <h1>Trade standout items in a marketplace that feels fast and premium.</h1>
+                        <p>Discover rare listings, buy outright when the price is right, and manage selling, bidding, payments, and account security from one polished workspace.</p>
+                        <div class="hero-actions">
+                            <button class="btn-primary btn-large" id="heroStart" type="button">Create your account</button>
+                            <button class="btn-secondary btn-large" id="heroSignIn" type="button">Sign in</button>
+                        </div>
+                        <div class="hero-footer">
+                            <span>Zero install</span>
+                            <span>Buy now and bidding flows</span>
+                            <span>Realtime marketplace updates</span>
+                        </div>
+                    </div>
+                    <div class="hero-aside">
+                        <div class="hero-stat-stack">
+                            <article class="hero-stat-card">
+                                <span class="eyebrow">Fastest lane</span>
+                                <strong>Bid, buy now, settle payment</strong>
+                                <p class="subtle">Short path from discovery to checkout, without losing auction depth.</p>
+                            </article>
+                            <article class="hero-stat-card accent">
+                                <span class="eyebrow">Seller cockpit</span>
+                                <strong>Launch listings with reserve, schedule, image, and auto-close logic.</strong>
+                                <p class="subtle">One form, all the controls that matter.</p>
+                            </article>
+                        </div>
+                        <div class="hero-market-strip">
+                            <div>
+                                <span class="eyebrow">Categories</span>
+                                <strong>Electronics, art, fashion, property</strong>
+                            </div>
+                            <div>
+                                <span class="eyebrow">Security</span>
+                                <strong>Session, CSRF, 2FA, lockout, CAPTCHA</strong>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="hero-footer">
-                    <span>Free to join</span>
-                    <span>Real-time auction updates</span>
-                    <span>Create and manage your own listings</span>
+
+                <div class="landing-panels">
+                    <article class="shell-panel spotlight-panel">
+                        <p class="eyebrow">What you can do</p>
+                        <h2>One marketplace, multiple modes of buying.</h2>
+                        <div class="spotlight-grid">
+                            <div class="spotlight-card">
+                                <span class="spotlight-mark">01</span>
+                                <h3>Track active bids</h3>
+                                <p class="subtle">See current price, bidder activity, watchlists, and countdowns at a glance.</p>
+                            </div>
+                            <div class="spotlight-card">
+                                <span class="spotlight-mark">02</span>
+                                <h3>Close with Buy It Now</h3>
+                                <p class="subtle">Jump straight to checkout when a listing offers a fixed price.</p>
+                            </div>
+                            <div class="spotlight-card">
+                                <span class="spotlight-mark">03</span>
+                                <h3>Operate securely</h3>
+                                <p class="subtle">Protect accounts with CAPTCHA, session controls, verification, and optional 2FA.</p>
+                            </div>
+                        </div>
+                    </article>
+                    <article class="shell-panel landing-side-panel">
+                        <p class="eyebrow">Marketplace rhythm</p>
+                        <ul class="signal-list">
+                            <li>Realtime bidding updates through WebSocket sync</li>
+                            <li>Admin controls for user limits, refunds, and monitoring</li>
+                            <li>Invoice and notification streams built into the same SPA</li>
+                        </ul>
+                    </article>
                 </div>
             </div>
         </section>
 
         <section id="authView" class="view hidden">
             <div class="auth-container">
-                <div class="auth-card">
-                    <h2 id="authTitle">Sign In</h2>
-                    <p class="subtle">Enter your details to access your account</p>
-                    <form id="authForm">
-                        <div class="form-group">
-                            <label>Username</label>
-                            <input type="text" name="username" placeholder="Enter username" required>
+                <div class="auth-frame">
+                    <div class="auth-sidebar">
+                        <p class="eyebrow">Secure entry</p>
+                        <h2>Access your auction workspace.</h2>
+                        <p class="subtle">Sign in to manage listings, track bids, confirm payments, and configure account security.</p>
+                        <div class="auth-points">
+                            <div class="auth-point">Realtime dashboard and watchlist tracking</div>
+                            <div class="auth-point">Protected sessions with CSRF and CAPTCHA</div>
+                            <div class="auth-point">Optional two-factor authentication</div>
                         </div>
-                        <div class="form-group">
-                            <label>Password</label>
-                            <input type="password" name="password" placeholder="Password" required>
-                        </div>
-                        <div class="form-group hidden" id="loginTwoFaGroup">
-                            <label>Two-Factor Code</label>
-                            <input type="text" name="twoFactorCode" id="loginTwoFaCode" placeholder="123456" maxlength="6" inputmode="numeric">
-                        </div>
-                        <div class="form-group" id="captchaGroup">
-                            <label id="captchaLabel">What is 5 + 3 - 2?</label>
-                            <input type="text" id="captchaAnswer" placeholder="Enter answer" required>
-                        </div>
-                        <input type="hidden" id="captchaChallengeId">
-                        <button type="submit" class="btn-primary btn-full" id="authSubmit">Sign In</button>
-                    </form>
-                    <p class="auth-toggle">
-                        <a href="#" id="forgotPasswordLink">Forgot password?</a>
-                    </p>
-                    <p class="auth-toggle">
-                        <span id="authToggleText">Don't have an account?</span>
-                        <a href="#" id="authToggleLink">Sign up</a>
-                    </p>
+                    </div>
+                    <div class="auth-card">
+                        <h2 id="authTitle">Sign In</h2>
+                        <p class="subtle">Enter your details to access your account.</p>
+                        <form id="authForm">
+                            <div class="form-group">
+                                <label>Username</label>
+                                <input type="text" name="username" placeholder="Enter username" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Password</label>
+                                <input type="password" name="password" placeholder="Password" required>
+                            </div>
+                            <div class="form-group hidden" id="loginTwoFaGroup">
+                                <label>Two-Factor Code</label>
+                                <input type="text" name="twoFactorCode" id="loginTwoFaCode" placeholder="123456" maxlength="6" inputmode="numeric">
+                            </div>
+                            <div class="form-group" id="captchaGroup">
+                                <label id="captchaLabel">What is 5 + 3 - 2?</label>
+                                <input type="text" id="captchaAnswer" placeholder="Enter answer" required>
+                            </div>
+                            <input type="hidden" id="captchaChallengeId">
+                            <button type="submit" class="btn-primary btn-full" id="authSubmit">Sign In</button>
+                        </form>
+                        <p class="auth-toggle">
+                            <a href="#" id="forgotPasswordLink">Forgot password?</a>
+                        </p>
+                        <p class="auth-toggle">
+                            <span id="authToggleText">Don't have an account?</span>
+                            <a href="#" id="authToggleLink">Sign up</a>
+                        </p>
+                    </div>
                 </div>
             </div>
         </section>
 
         <section id="dashboardView" class="view hidden">
             <div class="container">
-                <div class="view-header">
+                <div class="view-shell">
+                <div class="view-header hero-header">
                     <div>
+                        <p class="eyebrow">Marketplace overview</p>
                         <h1>Dashboard</h1>
-                        <p class="subtle">Overview of marketplace activity</p>
+                        <p class="subtle">Your live command center for selling, bidding, and monitoring activity.</p>
                     </div>
-                    <button class="btn-primary" data-view="create" type="button">+ New Auction</button>
+                    <button class="btn-primary" data-view="create" type="button">Create auction</button>
                 </div>
 
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-icon purple">T</div>
                         <div class="stat-info">
-                            <p class="subtle">TOTAL AUCTIONS</p>
+                            <p class="subtle">Total Auctions</p>
                             <h2 id="statTotal">0</h2>
                         </div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-icon green">L</div>
                         <div class="stat-info">
-                            <p class="subtle">LIVE NOW</p>
+                            <p class="subtle">Live Now</p>
                             <h2 id="statActive">0</h2>
                         </div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-icon blue">M</div>
                         <div class="stat-info">
-                            <p class="subtle">YOUR LISTINGS</p>
+                            <p class="subtle">Your Listings</p>
                             <h2 id="statMine">0</h2>
                         </div>
                     </div>
@@ -150,54 +233,60 @@
                     <a href="#" class="link" data-view="auctions">View all →</a>
                 </div>
                 <div id="latestGrid" class="auction-grid"></div>
+                </div>
             </div>
         </section>
 
         <section id="adminView" class="view hidden">
             <div class="container">
-                <div class="view-header">
+                <div class="view-shell">
+                <div class="view-header hero-header">
                     <div>
+                        <p class="eyebrow">Operations</p>
                         <h1>Admin Dashboard</h1>
-                        <p class="subtle">Manage users and monitor auction activity</p>
+                        <p class="subtle">Monitor marketplace health, active listings, user roles, and operational controls.</p>
                     </div>
-                    <button class="btn-primary" id="allUsersButton" type="button">All Users</button>
+                    <button class="btn-secondary" id="allUsersButton" type="button">All users</button>
                 </div>
 
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-icon green">L</div>
                         <div class="stat-info">
-                            <p class="subtle">LIVE AUCTIONS</p>
+                            <p class="subtle">Live Auctions</p>
                             <h2 id="statAdminActive">0</h2>
                         </div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-icon purple">T</div>
                         <div class="stat-info">
-                            <p class="subtle">TOTAL LISTINGS</p>
+                            <p class="subtle">Total Listings</p>
                             <h2 id="statAdminTotal">0</h2>
                         </div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-icon blue">U</div>
                         <div class="stat-info">
-                            <p class="subtle">TOTAL USERS</p>
+                            <p class="subtle">Total Users</p>
                             <h2 id="statAdminUsers">0</h2>
                         </div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-icon orange">R</div>
                         <div class="stat-info">
-                            <p class="subtle">RECENT SIGNUPS</p>
+                            <p class="subtle">Recent Signups</p>
                             <h2 id="statAdminRecent">0</h2>
                         </div>
                     </div>
                 </div>
 
                 <div class="admin-layout">
-                    <section class="detail-section">
+                    <section class="shell-panel">
                         <div class="section-header">
-                            <h2>Users</h2>
+                            <div>
+                                <p class="eyebrow">Users</p>
+                                <h2>User control</h2>
+                            </div>
                             <p class="subtle" id="adminUsersCount">0 users</p>
                         </div>
                         <div class="table-wrap">
@@ -216,11 +305,48 @@
                         </div>
                     </section>
                     
-                    <section class="detail-section">
+                    <section class="shell-panel">
                         <div class="section-header">
-                            <h2>Active Listings</h2>
+                            <div>
+                                <p class="eyebrow">Listings</p>
+                                <h2>Active marketplace</h2>
+                            </div>
                         </div>
                         <div id="adminGrid" class="auction-grid"></div>
+                    </section>
+                </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="admin-refundsView" class="view hidden">
+            <div class="container">
+                <div class="view-shell">
+                    <div class="view-header hero-header">
+                        <div>
+                            <p class="eyebrow">Operations</p>
+                            <h1>Refund Reviews</h1>
+                            <p class="subtle">Approve or reject refund requests and track payout state from one queue.</p>
+                        </div>
+                    </div>
+                    <section class="shell-panel">
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Refund ID</th>
+                                        <th>Auction</th>
+                                        <th>User</th>
+                                        <th>Amount</th>
+                                        <th>Reason</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="refundsTableBody"></tbody>
+                            </table>
+                        </div>
+                        <p class="empty-copy subtle" id="refundsEmpty">No refund requests yet.</p>
                     </section>
                 </div>
             </div>
@@ -228,26 +354,31 @@
 
         <section id="auctionsView" class="view hidden">
             <div class="container">
-                <div class="view-header">
-                    <div>
-                        <h1>All Auctions</h1>
-                        <p class="subtle" id="auctionCount">Searching for unique treasures</p>
+                <div class="view-shell">
+                    <div class="view-header hero-header">
+                        <div>
+                            <p class="eyebrow">Marketplace</p>
+                            <h1>All Auctions</h1>
+                            <p class="subtle" id="auctionCount">Searching for standout items.</p>
+                        </div>
                     </div>
-                    <div class="filter-bar">
-                        <input type="text" id="searchInput" placeholder="Search auctions...">
-                        <select id="categoryFilter">
-                            <option value="All">All Categories</option>
-                            <option value="ELECTRONICS">Electronics</option>
-                            <option value="ART">Art</option>
-                            <option value="VEHICLE">Vehicle</option>
-                            <option value="BOOK">Book</option>
-                            <option value="FASHION">Fashion</option>
-                            <option value="COLLECTIBLE">Collectible</option>
-                            <option value="PROPERTY">Property</option>
-                        </select>
-                    </div>
+                    <section class="shell-panel">
+                        <div class="filter-bar">
+                            <input type="text" id="searchInput" placeholder="Search auctions, sellers, or descriptions">
+                            <select id="categoryFilter">
+                                <option value="All">All Categories</option>
+                                <option value="ELECTRONICS">Electronics</option>
+                                <option value="ART">Art</option>
+                                <option value="VEHICLE">Vehicle</option>
+                                <option value="BOOK">Book</option>
+                                <option value="FASHION">Fashion</option>
+                                <option value="COLLECTIBLE">Collectible</option>
+                                <option value="PROPERTY">Property</option>
+                            </select>
+                        </div>
+                    </section>
+                    <div id="fullGrid" class="auction-grid"></div>
                 </div>
-                <div id="fullGrid" class="auction-grid"></div>
             </div>
         </section>
 
@@ -270,211 +401,249 @@
 
         <section id="my-bidsView" class="view hidden">
             <div class="container">
-                <div class="view-header">
-                    <div>
-                        <h1>My Bids</h1>
-                        <p class="subtle">Tracking your competition</p>
+                <div class="view-shell">
+                    <div class="view-header hero-header">
+                        <div>
+                            <p class="eyebrow">Your activity</p>
+                            <h1>My Bids</h1>
+                            <p class="subtle">Track where you are leading, competing, or waiting for results.</p>
+                        </div>
                     </div>
+                    <div class="tab-bar">
+                        <button class="tab active" data-filter="all" type="button">All</button>
+                        <button class="tab" data-filter="active" type="button">Active</button>
+                        <button class="tab" data-filter="ended" type="button">Ended</button>
+                    </div>
+                    <p class="subtle section-caption" id="myBidsCount">All bids (0)</p>
+                    <div id="myBidsGrid" class="auction-grid"></div>
                 </div>
-                <div class="tab-bar">
-                    <button class="tab active" data-filter="all" type="button">All</button>
-                    <button class="tab" data-filter="active" type="button">Active</button>
-                    <button class="tab" data-filter="ended" type="button">Ended</button>
-                </div>
-                <p class="subtle" id="myBidsCount">All bids (0)</p>
-                <div id="myBidsGrid" class="auction-grid"></div>
             </div>
         </section>
 
         <section id="my-auctionsView" class="view hidden">
             <div class="container">
-                <div class="view-header">
-                    <div>
-                        <h1>My Auctions</h1>
-                        <p class="subtle">Manage your listings</p>
+                <div class="view-shell">
+                    <div class="view-header hero-header">
+                        <div>
+                            <p class="eyebrow">Seller view</p>
+                            <h1>My Auctions</h1>
+                            <p class="subtle">Manage listings, review active bidding, and monitor finished sales.</p>
+                        </div>
+                        <button class="btn-primary" data-view="create" type="button">Create auction</button>
                     </div>
-                    <button class="btn-primary" data-view="create" type="button">+ New Auction</button>
+                    <div class="tab-bar">
+                        <button class="tab active" data-my-filter="all" type="button">All</button>
+                        <button class="tab" data-my-filter="active" type="button">Active</button>
+                        <button class="tab" data-my-filter="ended" type="button">Ended</button>
+                    </div>
+                    <p class="subtle section-caption" id="myAuctionsCount">Your auctions (0)</p>
+                    <div id="myAuctionsGrid" class="auction-grid"></div>
                 </div>
-                <div class="tab-bar">
-                    <button class="tab active" data-my-filter="all" type="button">All</button>
-                    <button class="tab" data-my-filter="active" type="button">Active</button>
-                    <button class="tab" data-my-filter="ended" type="button">Ended</button>
-                </div>
-                <p class="subtle" id="myAuctionsCount">Your auctions (0)</p>
-                <div id="myAuctionsGrid" class="auction-grid"></div>
             </div>
         </section>
 
         <section id="watchlistView" class="view hidden">
             <div class="container">
-                <div class="view-header">
-                    <div>
-                        <h1>My Watchlist</h1>
-                        <p class="subtle">Auctions you're watching</p>
+                <div class="view-shell">
+                    <div class="view-header hero-header">
+                        <div>
+                            <p class="eyebrow">Saved</p>
+                            <h1>Watchlist</h1>
+                            <p class="subtle">Keep the most interesting auctions in one focused shortlist.</p>
+                        </div>
                     </div>
+                    <div id="watchlistGrid" class="auction-grid"></div>
+                    <p class="empty-copy subtle" id="watchlistEmpty">Your watchlist is empty. Browse auctions and use the watch button to save items.</p>
                 </div>
-                <div id="watchlistGrid" class="auction-grid"></div>
-                <p class="subtle" id="watchlistEmpty" style="text-align:center; padding:3rem 0;">Your watchlist is empty. Browse auctions and click the watch icon to add items.</p>
             </div>
         </section>
 
         <section id="invoicesView" class="view hidden">
             <div class="container">
-                <div class="view-header">
-                    <div>
-                        <h1>Invoices</h1>
-                        <p class="subtle">Your payment history and invoices</p>
+                <div class="view-shell">
+                    <div class="view-header hero-header">
+                        <div>
+                            <p class="eyebrow">Billing</p>
+                            <h1>Invoices</h1>
+                            <p class="subtle">Payment history, amounts, and invoice status in one timeline.</p>
+                        </div>
                     </div>
+                    <section class="shell-panel">
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Invoice ID</th>
+                                        <th>Auction</th>
+                                        <th>Item</th>
+                                        <th>Amount</th>
+                                        <th>Date</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="invoicesTableBody">
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="empty-copy subtle" id="invoicesEmpty">No invoices yet.</p>
+                    </section>
                 </div>
-                <div class="table-wrap">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Invoice ID</th>
-                                <th>Auction</th>
-                                <th>Item</th>
-                                <th>Amount</th>
-                                <th>Date</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="invoicesTableBody">
-                        </tbody>
-                    </table>
-                </div>
-                <p class="subtle" id="invoicesEmpty" style="text-align:center; padding:3rem 0;">No invoices yet.</p>
             </div>
         </section>
 
         <section id="historyView" class="view hidden">
             <div class="container">
-                <div class="view-header">
-                    <div>
-                        <h1>Account History</h1>
-                        <p class="subtle">Your complete auction and bid activity</p>
+                <div class="view-shell">
+                    <div class="view-header hero-header">
+                        <div>
+                            <p class="eyebrow">Archive</p>
+                            <h1>Account History</h1>
+                            <p class="subtle">A complete view of your bids, wins, and selling history.</p>
+                        </div>
                     </div>
+                    <div class="tab-bar">
+                        <button class="tab active" data-history-filter="all" type="button">All Activity</button>
+                        <button class="tab" data-history-filter="bids" type="button">My Bids</button>
+                        <button class="tab" data-history-filter="won" type="button">Won Auctions</button>
+                        <button class="tab" data-history-filter="sold" type="button">Sold Items</button>
+                    </div>
+                    <div id="historyGrid" class="auction-grid"></div>
+                    <p class="empty-copy subtle" id="historyEmpty">No activity yet.</p>
                 </div>
-                <div class="tab-bar">
-                    <button class="tab active" data-history-filter="all" type="button">All Activity</button>
-                    <button class="tab" data-history-filter="bids" type="button">My Bids</button>
-                    <button class="tab" data-history-filter="won" type="button">Won Auctions</button>
-                    <button class="tab" data-history-filter="sold" type="button">Sold Items</button>
-                </div>
-                <div id="historyGrid" class="auction-grid"></div>
-                <p class="subtle" id="historyEmpty" style="text-align:center; padding:3rem 0;">No activity yet.</p>
             </div>
         </section>
 
         <section id="paymentResultView" class="view hidden">
             <div class="container">
-                <div class="auth-container">
-                    <div class="auth-card" style="text-align:center;">
-                        <div id="paymentResultIcon" style="font-size:4rem; margin-bottom:1rem;"></div>
+                <div class="result-shell">
+                    <div class="result-card">
+                        <div id="paymentResultIcon" class="result-icon"></div>
                         <h2 id="paymentResultTitle">Payment Processing</h2>
                         <p class="subtle" id="paymentResultMsg">Your payment is being processed. You will be notified once it's confirmed.</p>
-                        <button class="btn-primary" data-view="dashboard" type="button" style="margin-top:1.5rem;">Back to Dashboard</button>
+                        <button class="btn-primary" data-view="dashboard" type="button">Back to Dashboard</button>
                     </div>
                 </div>
             </div>
         </section>
 
         <section id="accountView" class="view hidden">
-            <div class="container-small">
-                <div class="view-header">
-                    <h1>Account Settings</h1>
-                </div>
-
-                <div class="detail-section" style="margin-bottom: 2rem;">
-                    <h3>Profile</h3>
-                    <p class="subtle">View your account activity</p>
-                    <div style="margin-top:1rem;">
-                        <button class="btn-secondary" data-view="history" type="button">View Account History</button>
+            <div class="container">
+                <div class="view-shell">
+                    <div class="view-header hero-header">
+                        <div>
+                            <p class="eyebrow">Account</p>
+                            <h1>Settings</h1>
+                            <p class="subtle">Manage profile access, verification, password controls, and security settings.</p>
+                        </div>
                     </div>
-                </div>
 
-                <div class="detail-section" style="margin-bottom: 2rem;">
-                    <h3>Email Verification</h3>
-                    <p class="subtle">Add or update your email to receive verification and password reset links.</p>
-                    <form id="emailForm">
-                        <div class="form-group">
-                            <label>Email Address</label>
-                            <input type="email" name="email" id="emailInput" placeholder="name@example.com" required>
+                    <div class="account-layout">
+                        <aside class="shell-panel account-sidebar">
+                            <p class="eyebrow">Profile</p>
+                            <div class="account-identity">
+                                <div class="avatar large" id="accountAvatar">A</div>
+                                <div>
+                                    <h3 id="accountUserName">Account</h3>
+                                    <p class="subtle" id="accountRoleLabel">Marketplace member</p>
+                                </div>
+                            </div>
+                            <button class="btn-secondary btn-full" data-view="history" type="button">View Account History</button>
+                        </aside>
+
+                        <div class="account-panels">
+                            <section class="shell-panel">
+                                <h3>Email Verification</h3>
+                                <p class="subtle">Add or update your email to receive verification and password reset links.</p>
+                                <form id="emailForm">
+                                    <div class="form-group">
+                                        <label>Email Address</label>
+                                        <input type="email" name="email" id="emailInput" placeholder="name@example.com" required>
+                                    </div>
+                                    <button type="submit" class="btn-primary">Send Verification Email</button>
+                                </form>
+                            </section>
+
+                            <section class="shell-panel">
+                                <h3>Two-Factor Authentication</h3>
+                                <p class="subtle" id="twoFaStatus">2FA is not enabled</p>
+                                <div class="button-row">
+                                    <button class="btn-secondary" id="enable2faBtn" type="button">Enable 2FA</button>
+                                    <button class="btn-secondary hidden" id="disable2faBtn" type="button">Disable 2FA</button>
+                                </div>
+                                <div id="twoFaSetup" class="hidden inline-panel">
+                                    <p class="subtle">Scan this QR code with your authenticator app.</p>
+                                    <div id="twoFaQrCode"></div>
+                                    <div class="form-group">
+                                        <label>Enter 6-digit code</label>
+                                        <input type="text" id="twoFaCodeInput" placeholder="123456" maxlength="6">
+                                    </div>
+                                    <button class="btn-primary" id="confirm2faBtn" type="button">Confirm</button>
+                                </div>
+                            </section>
+
+                            <section class="shell-panel">
+                                <h3>Security</h3>
+                                <p class="subtle">Update your password to keep your account secure.</p>
+                                <form id="passwordForm">
+                                    <div class="form-group">
+                                        <label>Current Password</label>
+                                        <input type="password" name="currentPassword" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>New Password</label>
+                                        <input type="password" name="newPassword" required>
+                                    </div>
+                                    <button type="submit" class="btn-primary">Update Password</button>
+                                </form>
+                            </section>
+
+                            <section class="shell-panel danger-panel">
+                                <h3>Danger Zone</h3>
+                                <p class="subtle">Deleting your account is permanent and removes access to this profile.</p>
+                                <button class="btn-secondary" id="deleteAccountBtn" type="button">Delete Account</button>
+                            </section>
                         </div>
-                        <button type="submit" class="btn-primary">Send Verification Email</button>
-                    </form>
-                </div>
-
-                <div class="detail-section" style="margin-bottom: 2rem;">
-                    <h3>Two-Factor Authentication</h3>
-                    <p class="subtle" id="twoFaStatus">2FA is not enabled</p>
-                    <div style="margin-top:1rem;">
-                        <button class="btn-secondary" id="enable2faBtn" type="button">Enable 2FA</button>
-                        <button class="btn-secondary hidden" id="disable2faBtn" type="button" style="color: var(--danger); border-color: var(--danger);">Disable 2FA</button>
                     </div>
-                    <div id="twoFaSetup" class="hidden" style="margin-top:1rem;">
-                        <p class="subtle">Scan this QR code with your authenticator app:</p>
-                        <div id="twoFaQrCode" style="margin:1rem 0;"></div>
-                        <div class="form-group">
-                            <label>Enter 6-digit code</label>
-                            <input type="text" id="twoFaCodeInput" placeholder="123456" maxlength="6">
-                        </div>
-                        <button class="btn-primary" id="confirm2faBtn" type="button">Confirm</button>
-                    </div>
-                </div>
-
-                <div class="detail-section" style="margin-bottom: 2rem;">
-                    <h3>Security</h3>
-                    <p class="subtle">Update your password to keep your account secure</p>
-                    <form id="passwordForm">
-                        <div class="form-group">
-                            <label>Current Password</label>
-                            <input type="password" name="currentPassword" required>
-                        </div>
-                        <div class="form-group">
-                            <label>New Password</label>
-                            <input type="password" name="newPassword" required>
-                        </div>
-                        <button type="submit" class="btn-primary">Update Password</button>
-                    </form>
-                </div>
-
-                <div class="detail-section">
-                    <h3 style="color: var(--danger);">Danger Zone</h3>
-                    <p class="subtle">Once you delete your account, there is no going back.</p>
-                    <button class="btn-secondary" style="color: var(--danger); border-color: var(--danger); margin-top: 1rem;" id="deleteAccountBtn">Delete Account</button>
                 </div>
             </div>
         </section>
 
         <section id="notificationsView" class="view hidden">
             <div class="container">
-                <div class="view-header">
-                    <div>
-                        <h1>Notifications</h1>
-                        <p class="subtle">Your recent activity and alerts</p>
+                <div class="view-shell">
+                    <div class="view-header hero-header">
+                        <div>
+                            <p class="eyebrow">Inbox</p>
+                            <h1>Notifications</h1>
+                            <p class="subtle">Your recent activity and alerts.</p>
+                        </div>
+                        <button class="btn-secondary" id="markAllReadBtn" type="button">Mark All Read</button>
                     </div>
-                    <button class="btn-secondary" id="markAllReadBtn" type="button">Mark All Read</button>
+                    <div id="notificationsList" class="notifications-list"></div>
+                    <p class="empty-copy subtle" id="notificationsEmpty">No notifications yet.</p>
                 </div>
-                <div id="notificationsList" class="notifications-list"></div>
-                <p class="subtle" id="notificationsEmpty" style="text-align:center; padding:3rem 0;">No notifications yet.</p>
             </div>
         </section>
 
         <section id="createView" class="view hidden">
-            <div class="container-small">
+            <div class="container">
                 <button class="back-link" data-view="dashboard">← Back to Dashboard</button>
-                <div class="view-header">
-                    <h1 id="auctionFormTitle">Create New Auction</h1>
+                <div class="view-header hero-header">
+                    <div>
+                        <p class="eyebrow">Seller studio</p>
+                        <h1 id="auctionFormTitle">Create New Auction</h1>
+                        <p class="subtle">Define pricing, timing, and purchase controls for your next listing.</p>
+                    </div>
                 </div>
 
-                <form id="auctionForm" class="detail-section">
+                <form id="auctionForm" class="shell-panel">
                     <div class="form-group">
                         <label>Item Name</label>
-                        <input type="text" name="name" placeholder="e.g. Vintage Camera" required>
+                        <input type="text" name="name" placeholder="Vintage camera, signed print, gaming laptop..." required>
                     </div>
                     <div class="form-group">
                         <label>Description</label>
-                        <textarea name="description" rows="4" placeholder="Describe your item..." required></textarea>
+                        <textarea name="description" rows="5" placeholder="Describe condition, history, authenticity, and included extras..." required></textarea>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -491,13 +660,13 @@
                         </div>
                         <div class="form-group">
                             <label>Starting Price</label>
-                            <input type="number" name="startingPrice" step="0.01" value="0.00" required>
+                            <input type="number" name="startingPrice" step="0.01" value="0.00" min="0.01" max="1000000000000" required>
                         </div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
                             <label>Duration (Minutes)</label>
-                            <input type="number" name="durationMinutes" value="60" required>
+                            <input type="number" name="durationMinutes" value="60" min="1" max="525600" required>
                         </div>
                         <div class="form-group">
                             <label>Currency</label>
@@ -516,22 +685,22 @@
                     </div>
                     <div class="form-group">
                         <label>Extra Info</label>
-                        <input type="text" name="extraInfo" placeholder="e.g. Brand, Model, Condition">
+                        <input type="text" name="extraInfo" placeholder="Brand, model, condition, provenance">
                     </div>
                     <div class="form-row">
                         <div class="form-group">
                             <label>Buy-It-Now Price (₫)</label>
-                            <input type="number" name="buyItNowPrice" step="0.01" value="0" placeholder="0 = disabled">
+                            <input type="number" name="buyItNowPrice" step="0.01" value="0" min="0" max="1000000000000" placeholder="0 = disabled">
                         </div>
                         <div class="form-group">
                             <label>Reserve Price (₫)</label>
-                            <input type="number" name="reservePrice" step="0.01" value="0" placeholder="0 = no reserve">
+                            <input type="number" name="reservePrice" step="0.01" value="0" min="0" max="1000000000000" placeholder="0 = no reserve">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label>Schedule Start Time (optional)</label>
+                        <label>Schedule Start Time (Optional)</label>
                         <input type="datetime-local" name="scheduledStartTime" id="scheduledStartTimeInput">
-                        <p class="subtle" style="font-size:0.75rem; margin-top:0.25rem;">Leave blank to start immediately</p>
+                        <p class="subtle helper-copy">Leave blank to start immediately.</p>
                     </div>
                     <div class="form-actions">
                         <button type="submit" class="btn-primary" id="submitAuctionBtn">Create Auction</button>
@@ -545,17 +714,23 @@
             <div class="container">
                 <button class="back-link" id="detailBack">← Back to Auctions</button>
                 
+                <div class="view-shell">
                 <div class="detail-layout">
                     <div class="detail-main">
                         <div class="image-placeholder-large" id="detailImage"></div>
-                        <div class="detail-info">
+                        <div class="detail-info shell-panel">
                             <span class="category-badge" id="detailCategory">Category</span>
                             <h1 id="detailTitle">Item Name</h1>
                             <p class="subtle" id="detailDesc">Description</p>
                         </div>
                         
-                        <div class="detail-section">
-                            <h3>Bid History</h3>
+                        <div class="shell-panel">
+                            <div class="section-header">
+                                <div>
+                                    <p class="eyebrow">Activity</p>
+                                    <h3>Bid History</h3>
+                                </div>
+                            </div>
                             <div class="history-list" id="bidHistoryList">
                             </div>
                         </div>
@@ -565,20 +740,23 @@
                         <div class="bid-box">
                             <div class="bid-box-header">
                                 <div>
-                                    <p class="subtle eyebrow">CURRENT PRICE</p>
-                                    <h2 id="detailPrice">Rs 0</h2>
-                                    <p class="subtle" id="detailStartPrice">Started at Rs 0</p>
+                                    <p class="subtle eyebrow">Current Price</p>
+                                    <h2 id="detailPrice">0</h2>
+                                    <p class="subtle" id="detailStartPrice">Started at 0</p>
                                 </div>
                                 <div class="bid-count-badge">
                                     <span id="detailBidCount">0</span> bids
                                 </div>
                             </div>
                             
-                            <button id="editAuctionBtn" class="btn-secondary btn-full hidden" style="margin-bottom: 1rem;" onclick="openEdit()">Edit Auction</button>
-                            <button id="watchBtn" class="btn-secondary btn-full hidden" style="margin-bottom: 1rem;" type="button">Watch</button>
+                            <div class="button-stack">
+                                <button id="editAuctionBtn" class="btn-secondary btn-full hidden" type="button" onclick="openEdit()">Edit Auction</button>
+                                <button id="deleteAuctionBtn" class="btn-secondary btn-full danger-btn hidden" type="button">Delete Item</button>
+                                <button id="watchBtn" class="btn-secondary btn-full hidden" type="button">Watch</button>
+                            </div>
 
                             <div class="timer-section" id="timerSection">
-                                <div class="timer-label">TIME REMAINING</div>
+                                <div class="timer-label">Time Remaining</div>
                                 <div class="countdown">
                                     <div class="time-unit"><span id="days">00</span>d</div>
                                     <div class="time-unit"><span id="hours">00</span>h</div>
@@ -588,14 +766,14 @@
                             </div>
 
                             <div id="endedMsg" class="auction-ended-msg hidden">
-                                This auction has ended
+                                This auction has ended.
                             </div>
 
                             <div id="winnerSection" class="winner-section hidden">
                                 <div class="winner-card">
                                     <div class="winner-icon">🏆</div>
                                     <div>
-                                        <p class="subtle eyebrow">WINNER</p>
+                                        <p class="subtle eyebrow">Winner</p>
                                         <h3 id="winnerName">-</h3>
                                         <p class="subtle">Final bid: <span class="highlight" id="winnerBid">Rs 0</span></p>
                                     </div>
@@ -606,34 +784,36 @@
                                 <button id="buyNowBtn" class="btn-primary btn-full" type="button" style="background: var(--success); box-shadow: 0 10px 24px rgb(36 199 138 / 0.28);">Buy It Now — <span id="buyNowPriceLabel"></span></button>
                             </div>
 
-                            <div id="paymentSection" class="hidden" style="margin-top:1rem;">
-                                <p class="subtle eyebrow">PAYMENT</p>
-                                <p class="subtle" id="paymentStatusText" style="margin-bottom:0.5rem;"></p>
-                                <button id="payNowBtn" class="btn-primary btn-full hidden" type="button">Pay with ZaloPay</button>
-                                <button id="markReceivedBtn" class="btn-secondary btn-full hidden" type="button">Mark as Received</button>
+                            <div id="paymentSection" class="hidden info-panel">
+                                <p class="subtle eyebrow">Payment</p>
+                                <p class="subtle" id="paymentStatusText"></p>
+                                <div class="button-stack">
+                                    <button id="payNowBtn" class="btn-primary btn-full hidden" type="button">Pay with ZaloPay</button>
+                                    <button id="markReceivedBtn" class="btn-secondary btn-full hidden" type="button">Mark as Received</button>
+                                </div>
                             </div>
 
-                            <div id="refundSection" class="hidden" style="margin-top:1rem;">
-                                <p class="subtle eyebrow">REFUND</p>
-                                <p class="subtle" id="refundStatusText" style="margin-bottom:0.5rem;"></p>
-                                <button id="requestRefundBtn" class="btn-secondary btn-full hidden" type="button" style="color: var(--warning); border-color: var(--warning);">Request Refund</button>
+                            <div id="refundSection" class="hidden info-panel">
+                                <p class="subtle eyebrow">Refund</p>
+                                <p class="subtle" id="refundStatusText"></p>
+                                <button id="requestRefundBtn" class="btn-secondary btn-full warning-btn hidden" type="button">Request Refund</button>
                             </div>
 
                             <div class="bid-actions" id="bidActions">
                                 <div class="input-with-button">
-                                    <input type="number" id="bidInput" placeholder="Bid amount">
+                                    <input type="number" id="bidInput" min="0.01" max="1000000000000" placeholder="Bid amount">
                                     <button class="btn-primary" id="placeBidBtn">Place Bid</button>
                                 </div>
-                                <p class="subtle" style="font-size: 0.75rem; text-align: center;">Enter at least current bid + increment</p>
+                                <p class="subtle helper-copy centered">Enter at least the current bid plus the minimum increment.</p>
                                 
-                                <hr style="margin: 1rem 0; border: 0; border-top: 1px solid var(--border);">
+                                <div class="divider"></div>
                                 
-                                <div class="form-group" style="margin-bottom: 0.5rem;">
+                                <div class="form-group compact">
                                     <label>Auto-bid Maximum</label>
-                                    <input type="number" id="autoMaxInput" placeholder="Max amount">
+                                    <input type="number" id="autoMaxInput" min="0.01" max="1000000000000" placeholder="Max amount">
                                 </div>
                                 <div class="input-with-button">
-                                    <input type="number" id="autoIncInput" placeholder="Increment" value="10">
+                                    <input type="number" id="autoIncInput" min="0.01" max="1000000000000" placeholder="Increment" value="10">
                                     <button class="btn-secondary" id="autoBidBtn">Auto-bid</button>
                                 </div>
                             </div>

@@ -31,6 +31,7 @@ const els = {
     userName: document.getElementById("userName"),
     userAvatar: document.getElementById("userAvatar"),
     adminLink: document.getElementById("adminLink"),
+    sellerLink: document.getElementById("sellerLink"),
     toast: document.getElementById("toast"),
     logoutButton: document.getElementById("logoutButton"),
     notifBell: document.getElementById("notifBell"),
@@ -82,6 +83,8 @@ const CATEGORY_META = {
     COLLECTIBLE: { label: "Collectible", blurb: "Cards, memorabilia, toys, trophies, and one-off pieces." },
     PROPERTY: { label: "Property", blurb: "Land, rental assets, spaces, and long-term holdings." }
 };
+
+const MAX_MONEY_AMOUNT = 1_000_000_000_000;
 
 function showTwoFactorPrompt() {
     const group = document.getElementById("loginTwoFaGroup");
@@ -155,6 +158,9 @@ function notify(message, type = "info") {
 
 function switchView(viewId) {
     state.currentView = viewId;
+    els.mainNav?.classList.remove('mobile-open');
+    els.guestNav?.classList.remove('mobile-open');
+    els.userNav?.classList.remove('mobile-open');
     document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
     const target = document.getElementById(viewId + 'View');
     if (target) target.classList.remove('hidden');
@@ -185,12 +191,61 @@ function renderNav() {
         els.userName.textContent = username.split(' ')[0];
         els.userAvatar.textContent = username.length > 0 ? username[0].toUpperCase() : '?';
         els.adminLink.classList.toggle("hidden", state.session.role !== "ADMIN");
+        els.sellerLink?.classList.remove("hidden");
         loadNotifications();
+    } else {
+        els.sellerLink?.classList.add("hidden");
     }
 }
 
 function formatMoney(value, currency = "VND") {
     return new Intl.NumberFormat("vi-VN", { style: "currency", currency: currency, maximumFractionDigits: 0 }).format(value);
+}
+
+function formatCompactMoney(value, currency = "VND") {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) {
+        return formatMoney(0, currency);
+    }
+    const abs = Math.abs(amount);
+    const units = [
+        { threshold: 1_000_000_000_000, suffix: "T" },
+        { threshold: 1_000_000_000, suffix: "B" },
+        { threshold: 1_000_000, suffix: "M" },
+        { threshold: 1_000, suffix: "K" }
+    ];
+    const symbol = new Intl.NumberFormat("vi-VN", {
+        style: "currency",
+        currency,
+        currencyDisplay: "narrowSymbol",
+        maximumFractionDigits: 0
+    }).formatToParts(0).find(part => part.type === "currency")?.value || `${currency} `;
+    const unit = units.find(entry => abs >= entry.threshold);
+    if (!unit) {
+        return formatMoney(amount, currency);
+    }
+    const compactValue = amount / unit.threshold;
+    const digits = compactValue >= 100 ? 0 : 1;
+    return `${symbol}${compactValue.toFixed(digits).replace(/\.0$/, "")}${unit.suffix}`;
+}
+
+function isMarketplaceVisible(auction) {
+    return auction?.state === 'OPEN' || auction?.state === 'RUNNING';
+}
+
+function getMarketplaceAuctions() {
+    return state.auctions.filter(isMarketplaceVisible);
+}
+
+function parseMoneyInput(rawValue, label, { allowZero = false } = {}) {
+    const amount = Number(rawValue);
+    if (!Number.isFinite(amount) || (allowZero ? amount < 0 : amount <= 0)) {
+        throw new Error(`${label} must be ${allowZero ? 'zero or greater' : 'greater than zero'}.`);
+    }
+    if (amount > MAX_MONEY_AMOUNT) {
+        throw new Error(`${label} must not exceed ${formatMoney(MAX_MONEY_AMOUNT, "VND")}.`);
+    }
+    return amount;
 }
 
 function getIcon(type) {
@@ -238,7 +293,7 @@ function createAuctionCard(auction, options = {}) {
                 <div class="auction-card-footer">
                     <div class="bid-info">
                         <p class="subtle eyebrow">CURRENT BID</p>
-                        <span class="bid-amount">${formatMoney(auction.currentPrice, auction.currency)}</span>
+                        <span class="bid-amount">${formatCompactMoney(auction.currentPrice, auction.currency)}</span>
                     </div>
                     <div class="bid-count">${auction.bidCount} bids</div>
                     <a href="#" class="link">View →</a>
@@ -260,7 +315,7 @@ function relativeEndShort(timestamp) {
 }
 
 function renderDashboard() {
-    const sorted = [...state.auctions].sort((a, b) => b.startTime - a.startTime);
+    const sorted = [...getMarketplaceAuctions()].sort((a, b) => b.startTime - a.startTime);
     els.latestGrid.innerHTML = sorted.slice(0, 4).map(a => createAuctionCard(a)).join("");
     els.statTotal.textContent = state.auctions.length;
     els.statActive.textContent = state.auctions.filter(a => a.state === 'RUNNING').length;
@@ -270,7 +325,7 @@ function renderDashboard() {
 function renderAuctions() {
     const search = els.searchInput?.value.toLowerCase() || "";
     const category = els.categoryFilter?.value || "All";
-    const filtered = state.auctions.filter(a => {
+    const filtered = getMarketplaceAuctions().filter(a => {
         const matchesSearch = !search || a.itemName.toLowerCase().includes(search) || a.description.toLowerCase().includes(search);
         const matchesCategory = category === "All" || a.itemType.toUpperCase() === category.toUpperCase();
         return matchesSearch && matchesCategory;
@@ -288,13 +343,14 @@ function renderCategories() {
     const summary = document.getElementById("categoriesSummary");
     if (!grid) return;
 
+    const marketplaceAuctions = getMarketplaceAuctions();
     const knownCategories = new Set(Object.keys(CATEGORY_META));
-    state.auctions.forEach(auction => {
+    marketplaceAuctions.forEach(auction => {
         if (auction?.itemType) knownCategories.add(String(auction.itemType).toUpperCase());
     });
 
     const categories = [...knownCategories].map(category => {
-        const allItems = state.auctions.filter(a => String(a.itemType || "").toUpperCase() === category);
+        const allItems = marketplaceAuctions.filter(a => String(a.itemType || "").toUpperCase() === category);
         const activeItems = allItems
             .filter(a => a.state === 'RUNNING')
             .sort((a, b) => a.endTime - b.endTime)
@@ -326,7 +382,7 @@ function renderCategories() {
             </div>
             <div class="category-highlight">
                 <span class="subtle">Catalog Size</span>
-                <span class="category-highlight-value">${state.auctions.length}</span>
+                <span class="category-highlight-value">${marketplaceAuctions.length}</span>
             </div>
         `;
     }
@@ -344,7 +400,7 @@ function renderCategories() {
                     ${category.previewItems.map(item => `
                         <div class="category-preview-item">
                             <span>${escapeHtml(item.itemName)}</span>
-                            <strong>${formatMoney(item.currentPrice, item.currency)}</strong>
+                            <strong>${formatCompactMoney(item.currentPrice, item.currency)}</strong>
                         </div>
                     `).join("")}
                 </div>
@@ -461,6 +517,12 @@ function renderAdminDashboard() {
     els.statAdminActive.textContent = state.auctions.filter(a => a.state === 'RUNNING').length;
     els.statAdminTotal.textContent = state.auctions.length;
     els.statAdminUsers.textContent = state.users.length;
+    if (els.statAdminRecent) {
+        const recentUsers = state.users.filter(user => user.createdAt && (Date.now() - Number(user.createdAt)) <= 7 * 24 * 60 * 60 * 1000);
+        els.statAdminRecent.textContent = recentUsers.length || state.users.length;
+    }
+    const usersCount = document.getElementById("adminUsersCount");
+    if (usersCount) usersCount.textContent = `${state.users.length} users`;
     if (els.userTableBody) {
         els.userTableBody.innerHTML = state.users.map(user => `
             <tr>
@@ -579,8 +641,21 @@ function renderAccount() {
     const enableBtn = document.getElementById("enable2faBtn");
     const disableBtn = document.getElementById("disable2faBtn");
     const emailInput = document.getElementById("emailInput");
+    const accountUserName = document.getElementById("accountUserName");
+    const accountRoleLabel = document.getElementById("accountRoleLabel");
+    const accountAvatar = document.getElementById("accountAvatar");
     if (emailInput && state.session?.email) {
         emailInput.value = state.session.email;
+    }
+    if (accountUserName && state.session?.username) {
+        accountUserName.textContent = state.session.username;
+    }
+    if (accountRoleLabel) {
+        accountRoleLabel.textContent = state.session?.role === "ADMIN" ? "Marketplace administrator" : "Marketplace member";
+    }
+    if (accountAvatar) {
+        const username = state.session?.username || "A";
+        accountAvatar.textContent = username.charAt(0).toUpperCase();
     }
     if (state.session?.twoFaEnabled) {
         twoFaStatus.textContent = "2FA is enabled";
@@ -620,6 +695,11 @@ function openDetail(id) {
     if (editBtn) {
         const canEdit = auction.ownerId === state.session?.userId && auction.bidCount === 0 && auction.state === 'RUNNING';
         editBtn.classList.toggle('hidden', !canEdit);
+    }
+    const deleteBtn = document.getElementById("deleteAuctionBtn");
+    if (deleteBtn) {
+        const canDelete = Boolean(state.session) && (auction.ownerId === state.session?.userId || state.session?.role === "ADMIN");
+        deleteBtn.classList.toggle('hidden', !canDelete);
     }
     const watchBtn = document.getElementById("watchBtn");
     if (watchBtn) {
@@ -762,7 +842,12 @@ document.getElementById("goHome").addEventListener('click', () => {
 });
 
 document.getElementById("mobileMenuBtn")?.addEventListener('click', () => {
-    notify("Mobile menu coming soon in the next update!", "info");
+    if (state.session) {
+        els.mainNav?.classList.toggle('mobile-open');
+        els.userNav?.classList.toggle('mobile-open');
+        return;
+    }
+    els.guestNav?.classList.toggle('mobile-open');
 });
 
 document.getElementById("openLogin").addEventListener('click', () => openAuth('login'));
@@ -773,6 +858,12 @@ document.getElementById("detailBack").addEventListener('click', () => switchView
 
 document.getElementById("notifBell")?.addEventListener('click', () => {
     switchView('notifications');
+});
+
+document.getElementById("openAccountBtn")?.addEventListener('click', () => {
+    if (state.session) {
+        switchView('account');
+    }
 });
 
 document.getElementById("markAllReadBtn")?.addEventListener('click', async () => {
@@ -873,8 +964,13 @@ els.logoutButton.addEventListener('click', async () => {
 });
 
 document.getElementById("placeBidBtn").addEventListener('click', async () => {
-    const amount = Number(document.getElementById("bidInput").value);
-    if (!amount || amount <= 0) { notify("Please enter a valid bid amount", "danger"); return; }
+    let amount;
+    try {
+        amount = parseMoneyInput(document.getElementById("bidInput").value, "Bid amount");
+    } catch (err) {
+        notify(err.message, "danger");
+        return;
+    }
     if (!state.token) { notify("Please sign in to place a bid", "danger"); return; }
     try {
         await api(`/api/auctions/${state.selectedAuctionId}/bid`, {
@@ -889,10 +985,15 @@ document.getElementById("placeBidBtn").addEventListener('click', async () => {
 });
 
 document.getElementById("autoBidBtn").addEventListener('click', async () => {
-    const maxBid = Number(document.getElementById("autoMaxInput").value);
-    const increment = Number(document.getElementById("autoIncInput").value);
-    if (!Number.isFinite(maxBid) || maxBid <= 0) { notify("Enter a valid auto-bid maximum", "danger"); return; }
-    if (!Number.isFinite(increment) || increment <= 0) { notify("Enter a valid auto-bid increment", "danger"); return; }
+    let maxBid;
+    let increment;
+    try {
+        maxBid = parseMoneyInput(document.getElementById("autoMaxInput").value, "Auto-bid maximum");
+        increment = parseMoneyInput(document.getElementById("autoIncInput").value, "Auto-bid increment");
+    } catch (err) {
+        notify(err.message, "danger");
+        return;
+    }
     try {
         await api(`/api/auctions/${state.selectedAuctionId}/autobid`, {
             method: "POST",
@@ -993,6 +1094,21 @@ document.getElementById("requestRefundBtn")?.addEventListener('click', async () 
     } catch (err) { notify(err.message, "danger"); }
 });
 
+document.getElementById("deleteAuctionBtn")?.addEventListener('click', async () => {
+    const auctionId = state.selectedAuctionId;
+    const auction = state.auctions.find(a => a.id === auctionId);
+    if (!auctionId || !auction) return;
+    const confirmed = window.confirm(`Delete "${auction.itemName}" permanently? This cannot be undone.`);
+    if (!confirmed) return;
+    try {
+        await api(`/api/auctions/${auctionId}`, { method: "DELETE" });
+        notify("Item deleted", "success");
+        await loadAuctions();
+        const nextView = auction.ownerId === state.session?.userId ? 'my-auctions' : (state.session?.role === "ADMIN" ? 'admin' : 'auctions');
+        switchView(nextView);
+    } catch (err) { notify(err.message, "danger"); }
+});
+
 function openEdit() {
     const auction = state.auctions.find(a => a.id === state.selectedAuctionId);
     if (!auction) return;
@@ -1023,10 +1139,15 @@ document.getElementById("auctionForm").addEventListener('submit', async e => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const body = Object.fromEntries(formData.entries());
-    body.startingPrice = Number(body.startingPrice);
+    try {
+        body.startingPrice = parseMoneyInput(body.startingPrice, "Starting price");
+        body.buyItNowPrice = parseMoneyInput(body.buyItNowPrice || 0, "Buy-it-now price", { allowZero: true });
+        body.reservePrice = parseMoneyInput(body.reservePrice || 0, "Reserve price", { allowZero: true });
+    } catch (err) {
+        notify(err.message, "danger");
+        return;
+    }
     body.durationMinutes = Number(body.durationMinutes);
-    body.buyItNowPrice = Number(body.buyItNowPrice || 0);
-    body.reservePrice = Number(body.reservePrice || 0);
     if (!body.extraInfo) delete body.extraInfo;
     const rawScheduledStartTime = body.scheduledStartTime;
     delete body.scheduledStartTime;
@@ -1213,6 +1334,12 @@ function initWebSocket() {
 async function loadAuctions() {
     const result = await api("/api/auctions");
     state.auctions = Array.isArray(result) ? result : (result.auctions || result.items || []);
+    if (state.currentView === 'detail' && state.selectedAuctionId && !state.auctions.some(a => a.id === state.selectedAuctionId)) {
+        state.selectedAuctionId = null;
+        switchView('auctions');
+        notify("This listing is no longer available.", "info");
+        return;
+    }
     if (state.session?.role === "ADMIN") {
         state.users = await api("/api/users");
     }

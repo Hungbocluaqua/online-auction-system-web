@@ -24,3 +24,8 @@
 {"timestamp":1775492138627,"action":"request_denied","actor":"hung","outcome":"denied","target":"/api/auctions/8e447a36-4c20-4cb0-a371-f3278d9e4ed0/pay","detail":"Invalid or missing CSRF token"}
 {"timestamp":1775492150024,"action":"login","actor":"hung","outcome":"success","target":"session","detail":"0:0:0:0:0:0:0:1"}
 {"timestamp":1775492162791,"action":"buy_now","actor":"hung","outcome":"success","target":"b4e5c8c3-b4c8-4e13-b922-57e33b75d948","detail":""}
+{"timestamp":1775494528959,"action":"request_denied","actor":"anonymous","outcome":"denied","target":"/api/notifications","detail":"Unauthorized"}
+{"timestamp":1775494529022,"action":"request_denied","actor":"anonymous","outcome":"denied","target":"/api/csrf","detail":"Unauthorized"}
+{"timestamp":1775494540542,"action":"login","actor":"hung","outcome":"success","target":"session","detail":"0:0:0:0:0:0:0:1"}
+{"timestamp":1775495282093,"action":"request_denied","actor":"admin","outcome":"denied","target":"/api/auctions/8e447a36-4c20-4cb0-a371-f3278d9e4ed0","detail":"Invalid or missing CSRF token"}
+{"timestamp":1775495369141,"action":"login","actor":"hung","outcome":"success","target":"session","detail":"0:0:0:0:0:0:0:1"}

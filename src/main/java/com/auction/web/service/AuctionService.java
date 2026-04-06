@@ -19,6 +19,7 @@ import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class AuctionService {
+    private static final double MAX_MONEY_AMOUNT = 1_000_000_000_000d;
     private final DatabaseManager db;
     private final WebSocketServerImpl wsServer;
     private final List<String> eventQueue = new CopyOnWriteArrayList<>();
@@ -416,13 +417,12 @@ public class AuctionService {
         User seller = requireUser(token);
         if (request.name == null || request.name.isBlank()) throw new IllegalArgumentException("Auction name is required");
         if (request.name.length() > 500) throw new IllegalArgumentException("Auction name must be 500 characters or less");
-        if (request.startingPrice <= 0) throw new IllegalArgumentException("Starting price must be positive");
-        if (request.startingPrice > 1e15) throw new IllegalArgumentException("Starting price is too large");
+        validateMoneyAmount(request.startingPrice, "Starting price", false);
         if (request.durationMinutes <= 0) throw new IllegalArgumentException("Duration must be positive");
         if (request.durationMinutes > 525600) throw new IllegalArgumentException("Duration must not exceed 1 year");
         if (request.itemType == null || request.itemType.isBlank()) throw new IllegalArgumentException("Item type is required");
-        if (request.buyItNowPrice < 0) throw new IllegalArgumentException("Buy-it-now price must be non-negative");
-        if (request.reservePrice < 0) throw new IllegalArgumentException("Reserve price must be non-negative");
+        validateMoneyAmount(request.buyItNowPrice, "Buy-it-now price", true);
+        validateMoneyAmount(request.reservePrice, "Reserve price", true);
         if (request.buyItNowPrice > 0 && request.buyItNowPrice <= request.startingPrice) throw new IllegalArgumentException("Buy-it-now price must be greater than starting price");
         if (request.reservePrice > 0 && request.reservePrice <= request.startingPrice) throw new IllegalArgumentException("Reserve price must be greater than starting price");
         long count = getActiveAuctionCount(seller.getId());
@@ -458,22 +458,29 @@ public class AuctionService {
             Auction auction = getAuctionEntity(conn, auctionId);
             if (!auction.getOwnerId().equals(seller.getId()) && seller.getRole() != User.Role.ADMIN) throw new SecurityException("Unauthorized");
             if (request.name == null || request.name.isBlank()) throw new IllegalArgumentException("Auction name is required");
-            if (request.startingPrice <= 0) throw new IllegalArgumentException("Starting price must be positive");
+            validateMoneyAmount(request.startingPrice, "Starting price", false);
             if (request.durationMinutes <= 0) throw new IllegalArgumentException("Duration must be positive");
             if (request.durationMinutes > 525600) throw new IllegalArgumentException("Duration must not exceed 1 year");
             if (request.itemType == null || request.itemType.isBlank()) throw new IllegalArgumentException("Item type is required");
+            validateMoneyAmount(request.buyItNowPrice, "Buy-it-now price", true);
+            validateMoneyAmount(request.reservePrice, "Reserve price", true);
+            if (request.buyItNowPrice > 0 && request.buyItNowPrice <= request.startingPrice) throw new IllegalArgumentException("Buy-it-now price must be greater than starting price");
+            if (request.reservePrice > 0 && request.reservePrice <= request.startingPrice) throw new IllegalArgumentException("Reserve price must be greater than starting price");
             if (auction.hasBids()) throw new IllegalStateException("Cannot edit with bids");
             String sanitizedName = com.auction.web.http.HtmlSanitizer.sanitizeAuctionName(request.name);
             String sanitizedDesc = com.auction.web.http.HtmlSanitizer.sanitize(request.description);
             String sanitizedExtra = com.auction.web.http.HtmlSanitizer.sanitize(request.extraInfo);
             Item item = ItemFactory.createItem(request.itemType, auction.getItem().getId(), sanitizedName, sanitizedDesc, request.startingPrice, sanitizedExtra);
             long newEndTime = System.currentTimeMillis() + ((long) request.durationMinutes * 60_000L);
-            try (PreparedStatement ps = conn.prepareStatement("UPDATE auctions SET item_id=?, item_type=?, item_name=?, description=?, starting_price=?, extra_info=?, currency=?, end_time=? WHERE id=?")) {
+            try (PreparedStatement ps = conn.prepareStatement("UPDATE auctions SET item_id=?, item_type=?, item_name=?, description=?, starting_price=?, extra_info=?, currency=?, end_time=?, buy_it_now_price=?, reserve_price=? WHERE id=?")) {
                 ps.setString(1, item.getId()); ps.setString(2, item.getType()); ps.setString(3, item.getName());
                 ps.setString(4, item.getDescription()); ps.setDouble(5, item.getStartingPrice());
                 ps.setString(6, item.getExtraValue());
                 ps.setString(7, request.currency == null || request.currency.isBlank() ? "USD" : request.currency.toUpperCase());
-                ps.setLong(8, newEndTime); ps.setString(9, auctionId);
+                ps.setLong(8, newEndTime);
+                ps.setDouble(9, request.buyItNowPrice);
+                ps.setDouble(10, request.reservePrice);
+                ps.setString(11, auctionId);
                 ps.executeUpdate();
             }
             broadcast("AUCTION_UPDATED:" + auctionId);
@@ -520,6 +527,7 @@ public class AuctionService {
 
     public AuctionView placeBid(String token, String auctionId, double amount) {
         User bidder = requireUser(token);
+        validateMoneyAmount(amount, "Bid amount", false);
         try (Connection conn = db.getConnection()) {
             conn.setAutoCommit(false);
             try {
@@ -543,8 +551,8 @@ public class AuctionService {
 
     public AuctionView configureAutoBid(String token, String auctionId, double maxBid, double increment) {
         User bidder = requireUser(token);
-        if (maxBid <= 0 || Double.isNaN(maxBid) || Double.isInfinite(maxBid)) throw new IllegalArgumentException("Invalid max bid");
-        if (increment <= 0 || Double.isNaN(increment) || Double.isInfinite(increment)) throw new IllegalArgumentException("Invalid increment");
+        validateMoneyAmount(maxBid, "Auto-bid maximum", false);
+        validateMoneyAmount(increment, "Auto-bid increment", false);
         try (Connection conn = db.getConnection()) {
             conn.setAutoCommit(false);
             try {
@@ -597,6 +605,7 @@ public class AuctionService {
 
     public Map<String, Object> payForAuction(String token, String auctionId, double amount) {
         User buyer = requireUser(token);
+        validateMoneyAmount(amount, "Payment amount", false);
         String paymentId = UUID.randomUUID().toString();
         try (Connection conn = db.getConnection()) {
             conn.setAutoCommit(false);
@@ -790,6 +799,7 @@ public class AuctionService {
                 if (auction.getState() != Auction.State.RUNNING) throw new IllegalStateException("Auction is not active");
                 if (auction.getOwnerId().equals(buyer.getId())) throw new IllegalStateException("You cannot buy your own auction");
                 double binPrice = auction.getBuyItNowPrice();
+                validateMoneyAmount(binPrice, "Buy-it-now price", false);
                 String paymentId = UUID.randomUUID().toString();
                 try (PreparedStatement ps = conn.prepareStatement("INSERT INTO payments (id, auction_id, buyer_id, buyer_username, amount, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)")) {
                     ps.setString(1, paymentId); ps.setString(2, auctionId);
@@ -1578,6 +1588,18 @@ public class AuctionService {
             ps.setString(4, bidder.getUsername()); ps.setDouble(5, amount);
             ps.setLong(6, System.currentTimeMillis());
             ps.executeUpdate();
+        }
+    }
+
+    private void validateMoneyAmount(double amount, String fieldName, boolean allowZero) {
+        if (Double.isNaN(amount) || Double.isInfinite(amount)) {
+            throw new IllegalArgumentException(fieldName + " is invalid");
+        }
+        if (allowZero ? amount < 0 : amount <= 0) {
+            throw new IllegalArgumentException(fieldName + (allowZero ? " must be non-negative" : " must be positive"));
+        }
+        if (amount > MAX_MONEY_AMOUNT) {
+            throw new IllegalArgumentException(fieldName + " must not exceed " + (long) MAX_MONEY_AMOUNT);
         }
     }
 
