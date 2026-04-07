@@ -85,6 +85,61 @@ const CATEGORY_META = {
 };
 
 const MAX_MONEY_AMOUNT = 1_000_000_000_000;
+const APP_CONFIG = (() => {
+    const rawConfig = window.AUCTION_APP_CONFIG || {};
+    return {
+        apiBaseUrl: normalizeBaseUrl(rawConfig.apiBaseUrl),
+        assetBaseUrl: normalizeBaseUrl(rawConfig.assetBaseUrl),
+        wsBaseUrl: normalizeWebSocketBaseUrl(rawConfig.wsBaseUrl)
+    };
+})();
+
+function normalizeBaseUrl(value) {
+    if (typeof value !== "string") {
+        return "";
+    }
+    return value.trim().replace(/\/+$/, "");
+}
+
+function normalizeWebSocketBaseUrl(value) {
+    return normalizeBaseUrl(value)
+        .replace(/^http:/i, "ws:")
+        .replace(/^https:/i, "wss:");
+}
+
+function isGitHubPagesDeployment() {
+    return window.location.hostname.endsWith(".github.io");
+}
+
+function needsExternalBackendConfig() {
+    return isGitHubPagesDeployment() && !APP_CONFIG.apiBaseUrl;
+}
+
+function resolveApiUrl(path) {
+    if (/^https?:\/\//i.test(path)) {
+        return path;
+    }
+    return APP_CONFIG.apiBaseUrl ? `${APP_CONFIG.apiBaseUrl}${path}` : path;
+}
+
+function resolveBackendOrigin() {
+    if (!APP_CONFIG.apiBaseUrl) {
+        return window.location.origin;
+    }
+    try {
+        return new URL(APP_CONFIG.apiBaseUrl, window.location.origin).origin;
+    } catch (_) {
+        return window.location.origin;
+    }
+}
+
+function resolveAssetUrl(path) {
+    if (/^https?:\/\//i.test(path)) {
+        return path;
+    }
+    const assetBase = APP_CONFIG.assetBaseUrl || resolveBackendOrigin();
+    return assetBase ? `${assetBase}${path}` : path;
+}
 
 function showTwoFactorPrompt() {
     const group = document.getElementById("loginTwoFaGroup");
@@ -106,12 +161,15 @@ function hideTwoFactorPrompt() {
 }
 
 async function api(path, options = {}) {
+    if (needsExternalBackendConfig()) {
+        throw new Error("GitHub Pages is serving the frontend only. Set apiBaseUrl in config.js to your backend URL.");
+    }
     const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
     if (state.token) headers.Authorization = `Bearer ${state.token}`;
     if (state.csrfToken && (options.method === "PUT" || options.method === "DELETE" || options.method === "POST" && !path.startsWith("/api/login") && !path.startsWith("/api/register") && !path.startsWith("/api/password-reset") && !path.startsWith("/api/account/verify") && !path.startsWith("/api/zalopay/callback"))) {
         headers["X-CSRF-Token"] = state.csrfToken;
     }
-    const response = await fetch(path, { ...options, headers });
+    const response = await fetch(resolveApiUrl(path), { ...options, headers });
     const rawBody = await response.text();
     let payload = null;
     if (rawBody) {
@@ -275,7 +333,7 @@ function createAuctionCard(auction, options = {}) {
     const isEnded = auction.state === 'FINISHED' || auction.state === 'CANCELED';
     const timeLabel = isEnded ? 'Ended' : relativeEndShort(auction.endTime);
     const imageHtml = auction.imageFilename ?
-        `<img src="/uploads/${escapeHtml(auction.imageFilename)}" style="width:100%; height:100%; object-fit:cover;">` :
+        `<img src="${escapeHtml(resolveAssetUrl(`/uploads/${encodeURIComponent(auction.imageFilename)}`))}" style="width:100%; height:100%; object-fit:cover;">` :
         getIcon(auction.itemType);
     const isWatching = state.watchlist.some(w => w.id === auction.id);
     return `
@@ -683,7 +741,7 @@ function openDetail(id) {
     els.sellerName.textContent = auction.ownerUsername;
     els.sellerAvatar.textContent = auction.ownerUsername.length > 0 ? auction.ownerUsername[0].toUpperCase() : '?';
     const imageHtml = auction.imageFilename ?
-        `<img src="/uploads/${escapeHtml(auction.imageFilename)}" style="width:100%; height:100%; object-fit:cover; border-radius:20px;">` :
+        `<img src="${escapeHtml(resolveAssetUrl(`/uploads/${encodeURIComponent(auction.imageFilename)}`))}" style="width:100%; height:100%; object-fit:cover; border-radius:20px;">` :
         getIcon(auction.itemType);
     els.detailImage.innerHTML = imageHtml;
     const isEnded = auction.state === 'FINISHED' || auction.state === 'CANCELED';
@@ -1311,6 +1369,9 @@ document.addEventListener('click', (e) => {
 });
 
 function initWebSocket() {
+    if (needsExternalBackendConfig()) {
+        return;
+    }
     let reloadTimeout = null;
     const ws = new WebSocket(resolveWebSocketUrl());
     ws.onopen = () => {
@@ -1380,6 +1441,9 @@ async function updateLimit(username) {
 
 async function init() {
     renderNav();
+    if (needsExternalBackendConfig()) {
+        notify("Pages deployment is live. Set config.js apiBaseUrl to connect your backend.", "info");
+    }
     await fetchRuntimeConfig();
     initWebSocket();
     await handleActionLinks();
@@ -1416,6 +1480,10 @@ async function init() {
 }
 
 async function fetchRuntimeConfig() {
+    if (needsExternalBackendConfig()) {
+        state.runtimeConfig = { wsPort: null };
+        return;
+    }
     try {
         state.runtimeConfig = await api("/api/config");
     } catch (_) {
@@ -1424,13 +1492,18 @@ async function fetchRuntimeConfig() {
 }
 
 function resolveWebSocketUrl() {
-    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    if (APP_CONFIG.wsBaseUrl) {
+        return APP_CONFIG.wsBaseUrl;
+    }
+    const backendOrigin = resolveBackendOrigin();
+    const backendUrl = new URL(backendOrigin);
+    const wsProtocol = backendUrl.protocol === "https:" ? "wss:" : "ws:";
     const configuredPort = Number(state.runtimeConfig?.wsPort || 0);
     const defaultPort = wsProtocol === "wss:" ? 443 : 80;
-    const currentPort = window.location.port ? Number(window.location.port) : defaultPort;
+    const currentPort = backendUrl.port ? Number(backendUrl.port) : defaultPort;
     const host = configuredPort && configuredPort !== currentPort
-        ? `${window.location.hostname}:${configuredPort}`
-        : window.location.host;
+        ? `${backendUrl.hostname}:${configuredPort}`
+        : backendUrl.host;
     return `${wsProtocol}//${host}`;
 }
 

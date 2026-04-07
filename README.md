@@ -160,6 +160,27 @@ The compose file includes:
 
 Note: the app currently uses PostgreSQL, Mailpit, Prometheus, and Grafana more directly than Redis. Redis is present in the compose stack but is not a core runtime dependency in the current Java service.
 
+## GitHub Pages
+
+GitHub Pages can host the static frontend in `src/main/resources/static`, but it cannot run the Java API or WebSocket server.
+
+What was added for Pages:
+
+- `.github/workflows/pages.yml` deploys the static frontend to Pages
+- `src/main/resources/static/config.js` lets the Pages site point at an external backend
+- frontend asset paths now work from a repo subpath such as `https://<user>.github.io/<repo>/`
+
+Before you publish:
+
+1. Edit `src/main/resources/static/config.js`.
+2. Set `apiBaseUrl` to the public URL of your backend, for example `https://api.example.com` and do not append `/api`.
+3. If your WebSocket endpoint is not derived from that backend URL, set `wsBaseUrl` too.
+4. If uploaded images are served from a different host, set `assetBaseUrl`.
+5. On the backend, set `CORS_ORIGIN` to your Pages origin, for example `https://<user>.github.io`.
+6. In the GitHub repository settings, enable Pages with source `GitHub Actions`.
+
+If `config.js` is left empty, the Pages deployment will still load the frontend shell, but API-backed features will not work.
+
 ## HTTP Endpoints
 
 Operational endpoints:
